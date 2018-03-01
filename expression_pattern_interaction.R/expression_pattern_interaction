@@ -1,0 +1,1126 @@
+#Run following step for some of libraries 
+# we want to know what does expression pattern of DGE genes from two way interaction mean?for gt20:trt on timepoint=4 at any treatment)
+##subsetting data based on timepoint=4 for two way interaction(gt*trt) 
+
+counts.final <- read.csv("../input/NAMparents.coutns.final.csv", row.names = 1)
+load("../input/NAMparents.samples.nolow.final.Rdata")
+head(counts.final)
+counts.final[is.na(counts.final)]<-0
+library("DESeq2")
+samples.nolow.final.s<-samples.nolow.final[samples.nolow.final$genotype== "23"|samples.nolow.final$genotype==20,]
+
+samples.nolow.final.s<-samples.nolow.final.s[samples.nolow.final.s$time=="4",] # only "4" timepoint
+samples.nolow.final.s$genotype<-as.factor(as.character(samples.nolow.final.s$genotype))
+samples.nolow.final.s$genotype<-relevel(samples.nolow.final.s$genotype,ref="23")
+counts.final.gt20time4 <- read.csv("../input/NAMparents.coutns.final.gt20time4.csv", row.names = 1)
+dds.final.gt20time4 <- DESeqDataSetFromMatrix(countData = round(counts.final.gt20time4), colData = samples.nolow.final.s, design = ~ genotype*trt+ batch)
+
+vst.final.gt20time4 <- varianceStabilizingTransformation(dds.final.gt20time4)
+vstMat.final.gt20time4 <- assay(vst.final.gt20time4)
+head(vstMat.final.gt20time4)
+dim(vstMat.final.gt20time4)
+# 1) trasform my dataset from wide to long format
+library(reshape2)
+vstMat.final.melt.gt20time4 <- melt(vstMat.final.gt20time4)
+head(vstMat.final.melt.gt20time4)
+tail(vstMat.final.melt.gt20time4)
+
+#2) get description for each factor of your VST normalized read count
+vstMat.final.melt.gt20time4$genotype<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\2",vstMat.final.melt.gt20time4$Var2))
+vstMat.final.melt.gt20time4$trt<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\3",vstMat.final.melt.gt20time4$Var2))
+vstMat.final.melt.gt20time4$time<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\4",vstMat.final.melt.gt20time4$Var2))
+# 3) get the mean across three biological replicate
+vstMat.final.melt.mean.gt20time4<-as.data.frame(tapply(vstMat.final.melt.gt20time4$value,list(vstMat.final.melt.gt20time4$Var1,vstMat.final.melt.gt20time4$genotype,vstMat.final.melt.gt20time4$trt,vstMat.final.melt.gt20time4$time),mean)) 
+colnames(vstMat.final.melt.mean.gt20time4)
+#modify colnames with gsub(the result of these two code are same) to have input file look like summary.vst file in Kazu data
+#gsub("*[\\. ] *", "", colnames(vstMat.final.melt.mean))
+#gsub("\\.","",colnames(vstMat.final.melt.mean))
+colnames(vstMat.final.melt.mean.gt20time4)<- gsub("\\.","",colnames(vstMat.final.melt.mean.gt20time4))
+rownames(vstMat.final.melt.mean.gt20time4)
+
+
+#now we want to draw expression pattern for all  DE genes in two way interaction gt:trt on timepoint=4
+load("../output/dge.nolow.final.glm.lrt.time420.Rdata")
+DEgene.2.interaction.gt20time4 <-topTags(dge.nolow.final.glm.lrt,n=10000)$table[topTags(dge.nolow.final.glm.lrt,n=10000)$table$FDR<0.001,] 
+dim(DEgene.2.interaction.gt20time4) 
+order(DEgene.2.interaction.gt20time4$FDR)
+
+row.names(DEgene.2.interaction.gt20time4) #for first 30 genes out of 1641
+
+
+#draw expression pattern for each genes in all genotypes response to all levels of time in sun condition
+p20time4 <-expression.pattern.graph3.nam(vstMat.final.melt.mean.gt20time4,target.genes=rownames(DEgene.2.interaction.gt20time4)[1:30],plot.order=rownames(DEgene.2.interaction.gt20time4))
+
+p20time4
+ggsave(p20time4,file="../output/expression.pattern.graph.DEGthreeway.p20time4.png",width=11,height=25)
+
+# we want to know what does expression pattern of DGE genes from two way interaction mean?for gt21:trt on timepoint=4 at any treatment)
+##subsetting data based on timepoint=4 for two way interaction(gt*trt) 
+```{r}
+counts.final <- read.csv("../input/NAMparents.coutns.final.csv", row.names = 1)
+load("../input/NAMparents.samples.nolow.final.Rdata")
+head(counts.final)
+counts.final[is.na(counts.final)]<-0
+library("DESeq2")
+samples.nolow.final.s<-samples.nolow.final[samples.nolow.final$genotype== "23"|samples.nolow.final$genotype==21,]
+
+samples.nolow.final.s<-samples.nolow.final.s[samples.nolow.final.s$time=="4",] # only "4" timepoint
+samples.nolow.final.s$genotype<-as.factor(as.character(samples.nolow.final.s$genotype))
+samples.nolow.final.s$genotype<-relevel(samples.nolow.final.s$genotype,ref="23")
+counts.final.gt21time4 <- read.csv("../input/NAMparents.coutns.final.gt21time4.csv", row.names = 1)
+dds.final.gt21time4 <- DESeqDataSetFromMatrix(countData = round(counts.final.gt21time4), colData = samples.nolow.final.s, design = ~ genotype*trt+ batch)
+
+vst.final.gt21time4 <- varianceStabilizingTransformation(dds.final.gt21time4)
+vstMat.final.gt21time4 <- assay(vst.final.gt21time4)
+head(vstMat.final.gt21time4)
+dim(vstMat.final.gt21time4)
+# 1) trasform my dataset from wide to long format
+library(reshape2)
+vstMat.final.melt.gt21time4 <- melt(vstMat.final.gt21time4)
+head(vstMat.final.melt.gt21time4)
+tail(vstMat.final.melt.gt21time4)
+
+#2) get description for each factor of your VST normalized read count
+vstMat.final.melt.gt21time4$genotype<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\2",vstMat.final.melt.gt21time4$Var2))
+vstMat.final.melt.gt21time4$trt<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\3",vstMat.final.melt.gt21time4$Var2))
+vstMat.final.melt.gt21time4$time<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\4",vstMat.final.melt.gt21time4$Var2))
+# 3) get the mean across three biological replicate
+vstMat.final.melt.mean.gt21time4<-as.data.frame(tapply(vstMat.final.melt.gt21time4$value,list(vstMat.final.melt.gt21time4$Var1,vstMat.final.melt.gt21time4$genotype,vstMat.final.melt.gt21time4$trt,vstMat.final.melt.gt21time4$time),mean)) 
+colnames(vstMat.final.melt.mean.gt21time4)
+#modify colnames with gsub(the result of these two code are same) to have input file look like summary.vst file in Kazu data
+#gsub("*[\\. ] *", "", colnames(vstMat.final.melt.mean))
+#gsub("\\.","",colnames(vstMat.final.melt.mean))
+colnames(vstMat.final.melt.mean.gt21time4)<- gsub("\\.","",colnames(vstMat.final.melt.mean.gt21time4))
+rownames(vstMat.final.melt.mean.gt21time4)
+
+
+#now we want to draw expression pattern for all  DE genes in two way interaction gt:trt on timepoint=4
+load("../output/dge.nolow.final.glm.lrt.time421.Rdata")
+DEgene.2.interaction.gt21time4 <-topTags(dge.nolow.final.glm.lrt,n=10000)$table[topTags(dge.nolow.final.glm.lrt,n=10000)$table$FDR<0.001,] 
+dim(DEgene.2.interaction.gt21time4) 
+order(DEgene.2.interaction.gt21time4$FDR)
+
+row.names(DEgene.2.interaction.gt21time4) #for first 30 genes out of 1246
+
+
+#draw expression pattern for each genes in all genotypes response to all levels of time in sun condition
+p21time4 <-expression.pattern.graph3.nam(vstMat.final.melt.mean.gt21time4,target.genes=rownames(DEgene.2.interaction.gt21time4)[1:30],plot.order=rownames(DEgene.2.interaction.gt21time4))
+
+p21time4
+ggsave(p21time4,file="../output/expression.pattern.graph.DEGthreeway.p21time4.png",width=11,height=25)
+
+
+# we want to know what does expression pattern of DGE genes from two way interaction mean?for gt22:trt on timepoint=4 at any treatment)
+##subsetting data based on timepoint=4 for two way interaction(gt*trt) 
+```{r}
+counts.final <- read.csv("../input/NAMparents.coutns.final.csv", row.names = 1)
+load("../input/NAMparents.samples.nolow.final.Rdata")
+head(counts.final)
+counts.final[is.na(counts.final)]<-0
+library("DESeq2")
+samples.nolow.final.s<-samples.nolow.final[samples.nolow.final$genotype== "23"|samples.nolow.final$genotype==22,]
+
+samples.nolow.final.s<-samples.nolow.final.s[samples.nolow.final.s$time=="4",] # only "4" timepoint
+samples.nolow.final.s$genotype<-as.factor(as.character(samples.nolow.final.s$genotype))
+samples.nolow.final.s$genotype<-relevel(samples.nolow.final.s$genotype,ref="23")
+counts.final.gt22time4 <- read.csv("../input/NAMparents.coutns.final.gt22time4.csv", row.names = 1)
+dds.final.gt22time4 <- DESeqDataSetFromMatrix(countData = round(counts.final.gt22time4), colData = samples.nolow.final.s, design = ~ genotype*trt+ batch)
+
+vst.final.gt22time4 <- varianceStabilizingTransformation(dds.final.gt22time4)
+vstMat.final.gt22time4 <- assay(vst.final.gt22time4)
+head(vstMat.final.gt22time4)
+dim(vstMat.final.gt22time4)
+# 1) trasform my dataset from wide to long format
+library(reshape2)
+vstMat.final.melt.gt22time4 <- melt(vstMat.final.gt22time4)
+head(vstMat.final.melt.gt22time4)
+tail(vstMat.final.melt.gt22time4)
+
+#2) get description for each factor of your VST normalized read count
+vstMat.final.melt.gt22time4$genotype<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\2",vstMat.final.melt.gt22time4$Var2))
+vstMat.final.melt.gt22time4$trt<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\3",vstMat.final.melt.gt22time4$Var2))
+vstMat.final.melt.gt22time4$time<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\4",vstMat.final.melt.gt22time4$Var2))
+# 3) get the mean across three biological replicate
+vstMat.final.melt.mean.gt22time4<-as.data.frame(tapply(vstMat.final.melt.gt22time4$value,list(vstMat.final.melt.gt22time4$Var1,vstMat.final.melt.gt22time4$genotype,vstMat.final.melt.gt22time4$trt,vstMat.final.melt.gt22time4$time),mean)) 
+colnames(vstMat.final.melt.mean.gt22time4)
+#modify colnames with gsub(the result of these two code are same) to have input file look like summary.vst file in Kazu data
+#gsub("*[\\. ] *", "", colnames(vstMat.final.melt.mean))
+#gsub("\\.","",colnames(vstMat.final.melt.mean))
+colnames(vstMat.final.melt.mean.gt22time4)<- gsub("\\.","",colnames(vstMat.final.melt.mean.gt22time4))
+rownames(vstMat.final.melt.mean.gt22time4)
+
+
+#now we want to draw expression pattern for all  DE genes in two way interaction gt:trt on timepoint=4
+load("../output/dge.nolow.final.glm.lrt.time422.Rdata")
+DEgene.2.interaction.gt22time4 <-topTags(dge.nolow.final.glm.lrt,n=10000)$table[topTags(dge.nolow.final.glm.lrt,n=10000)$table$FDR<0.001,] 
+dim(DEgene.2.interaction.gt22time4) 
+order(DEgene.2.interaction.gt22time4$FDR)
+
+row.names(DEgene.2.interaction.gt22time4) #for first 30 genes out of 2378
+
+
+#draw expression pattern for each genes in all genotypes response to all levels of time in sun condition
+p22time4 <-expression.pattern.graph3.nam(vstMat.final.melt.mean.gt22time4,target.genes=rownames(DEgene.2.interaction.gt22time4)[1:30],plot.order=rownames(DEgene.2.interaction.gt22time4))
+
+p22time4
+ggsave(p22time4,file="../output/expression.pattern.graph.DEGthreeway.p22time4.png",width=11,height=25)
+
+# we want to know what does expression pattern of DGE genes from two way interaction mean?for gt24:trt on timepoint=4 at any treatment)
+##subsetting data based on timepoint=4 for two way interaction(gt*trt) 
+```{r}
+counts.final <- read.csv("../input/NAMparents.coutns.final.csv", row.names = 1)
+load("../input/NAMparents.samples.nolow.final.Rdata")
+head(counts.final)
+counts.final[is.na(counts.final)]<-0
+library("DESeq2")
+samples.nolow.final.s<-samples.nolow.final[samples.nolow.final$genotype== "23"|samples.nolow.final$genotype==24,]
+
+samples.nolow.final.s<-samples.nolow.final.s[samples.nolow.final.s$time=="4",] # only "4" timepoint
+samples.nolow.final.s$genotype<-as.factor(as.character(samples.nolow.final.s$genotype))
+samples.nolow.final.s$genotype<-relevel(samples.nolow.final.s$genotype,ref="23")
+counts.final.gt24time4 <- read.csv("../input/NAMparents.coutns.final.gt24time4.csv", row.names = 1)
+dds.final.gt24time4 <- DESeqDataSetFromMatrix(countData = round(counts.final.gt24time4), colData = samples.nolow.final.s, design = ~ genotype*trt+ batch)
+
+vst.final.gt24time4 <- varianceStabilizingTransformation(dds.final.gt24time4)
+vstMat.final.gt24time4 <- assay(vst.final.gt24time4)
+head(vstMat.final.gt24time4)
+dim(vstMat.final.gt24time4)
+# 1) trasform my dataset from wide to long format
+library(reshape2)
+vstMat.final.melt.gt24time4 <- melt(vstMat.final.gt24time4)
+head(vstMat.final.melt.gt24time4)
+tail(vstMat.final.melt.gt24time4)
+
+#2) get description for each factor of your VST normalized read count
+vstMat.final.melt.gt24time4$genotype<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\2",vstMat.final.melt.gt24time4$Var2))
+vstMat.final.melt.gt24time4$trt<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\3",vstMat.final.melt.gt24time4$Var2))
+vstMat.final.melt.gt24time4$time<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\4",vstMat.final.melt.gt24time4$Var2))
+# 3) get the mean across three biological replicate
+vstMat.final.melt.mean.gt24time4<-as.data.frame(tapply(vstMat.final.melt.gt24time4$value,list(vstMat.final.melt.gt24time4$Var1,vstMat.final.melt.gt24time4$genotype,vstMat.final.melt.gt24time4$trt,vstMat.final.melt.gt24time4$time),mean)) 
+colnames(vstMat.final.melt.mean.gt24time4)
+#modify colnames with gsub(the result of these two code are same) to have input file look like summary.vst file in Kazu data
+#gsub("*[\\. ] *", "", colnames(vstMat.final.melt.mean))
+#gsub("\\.","",colnames(vstMat.final.melt.mean))
+colnames(vstMat.final.melt.mean.gt24time4)<- gsub("\\.","",colnames(vstMat.final.melt.mean.gt24time4))
+rownames(vstMat.final.melt.mean.gt24time4)
+
+
+#now we want to draw expression pattern for all  DE genes in two way interaction gt:trt on timepoint=4
+load("../output/dge.nolow.final.glm.lrt.time424.Rdata")
+DEgene.2.interaction.gt24time4 <-topTags(dge.nolow.final.glm.lrt,n=10000)$table[topTags(dge.nolow.final.glm.lrt,n=10000)$table$FDR<0.001,] 
+dim(DEgene.2.interaction.gt24time4) 
+order(DEgene.2.interaction.gt24time4$FDR)
+
+row.names(DEgene.2.interaction.gt24time4) #for first 30 genes out of 2818
+
+
+#draw expression pattern for each genes in all genotypes response to all levels of time in sun condition
+p24time4 <-expression.pattern.graph3.nam(vstMat.final.melt.mean.gt24time4,target.genes=rownames(DEgene.2.interaction.gt24time4)[1:30],plot.order=rownames(DEgene.2.interaction.gt24time4))
+
+p24time4
+ggsave(p24time4,file="../output/expression.pattern.graph.DEGthreeway.p24NAMparents.coutns.final.gt24time4.png",width=11,height=25)
+
+
+
+# we want to know what does expression pattern of DGE genes from two way interaction mean?for gt20:trt on timepoint=49 at any treatment)
+##subsetting data based on timepoint=49 for two way interaction(gt*trt) 
+```{r}
+counts.final <- read.csv("../input/NAMparents.coutns.final.csv", row.names = 1)
+load("../input/NAMparents.samples.nolow.final.Rdata")
+head(counts.final)
+counts.final[is.na(counts.final)]<-0
+library("DESeq2")
+samples.nolow.final.s<-samples.nolow.final[samples.nolow.final$genotype== "23"|samples.nolow.final$genotype==20,]
+
+samples.nolow.final.s<-samples.nolow.final.s[samples.nolow.final.s$time=="49",] # only "49" timepoint
+samples.nolow.final.s$genotype<-as.factor(as.character(samples.nolow.final.s$genotype))
+samples.nolow.final.s$genotype<-relevel(samples.nolow.final.s$genotype,ref="23")
+counts.final.gt20time49 <- read.csv("../input/NAMparents.coutns.final.gt20time49.csv", row.names = 1)
+dds.final.gt20time49 <- DESeqDataSetFromMatrix(countData = round(counts.final.gt20time49), colData = samples.nolow.final.s, design = ~ genotype*trt+ batch)
+
+vst.final.gt20time49 <- varianceStabilizingTransformation(dds.final.gt20time49)
+vstMat.final.gt20time49 <- assay(vst.final.gt20time49)
+head(vstMat.final.gt20time49)
+dim(vstMat.final.gt20time49)
+# 1) trasform my dataset from wide to long format
+library(reshape2)
+vstMat.final.melt.gt20time49 <- melt(vstMat.final.gt20time49)
+head(vstMat.final.melt.gt20time49)
+tail(vstMat.final.melt.gt20time49)
+
+#2) get description for each factor of your VST normalized read count
+vstMat.final.melt.gt20time49$genotype<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\2",vstMat.final.melt.gt20time49$Var2))
+vstMat.final.melt.gt20time49$trt<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\3",vstMat.final.melt.gt20time49$Var2))
+vstMat.final.melt.gt20time49$time<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\4",vstMat.final.melt.gt20time49$Var2))
+# 3) get the mean across three biological replicate
+vstMat.final.melt.mean.gt20time49<-as.data.frame(tapply(vstMat.final.melt.gt20time49$value,list(vstMat.final.melt.gt20time49$Var1,vstMat.final.melt.gt20time49$genotype,vstMat.final.melt.gt20time49$trt,vstMat.final.melt.gt20time49$time),mean)) 
+colnames(vstMat.final.melt.mean.gt20time49)
+#modify colnames with gsub(the result of these two code are same) to have input file look like summary.vst file in Kazu data
+#gsub("*[\\. ] *", "", colnames(vstMat.final.melt.mean))
+#gsub("\\.","",colnames(vstMat.final.melt.mean))
+colnames(vstMat.final.melt.mean.gt20time49)<- gsub("\\.","",colnames(vstMat.final.melt.mean.gt20time49))
+rownames(vstMat.final.melt.mean.gt20time49)
+
+
+#now we want to draw expression pattern for all  DE genes in two way interaction gt:trt on timepoint=4
+load("../output/dge.nolow.final.glm.lrt.time4920.Rdata")
+DEgene.2.interaction.gt20time49 <-topTags(dge.nolow.final.glm.lrt,n=10000)$table[topTags(dge.nolow.final.glm.lrt,n=10000)$table$FDR<0.001,] 
+dim(DEgene.2.interaction.gt20time49) 
+order(DEgene.2.interaction.gt20time49$FDR)
+
+row.names(DEgene.2.interaction.gt20time49) #for first 30 genes out of 1507
+
+
+#draw expression pattern for each genes in all genotypes response to all levels of time in sun condition
+p20time49 <-expression.pattern.graph3.nam(vstMat.final.melt.mean.gt20time49,target.genes=rownames(DEgene.2.interaction.gt20time49)[1:30],plot.order=rownames(DEgene.2.interaction.gt20time49))
+
+p20time49
+ggsave(p20time49,file="../output/expression.pattern.graph.DEGthreeway.p24NAMparents.coutns.final.gt20time49.png",width=11,height=25)
+
+
+# we want to know what does expression pattern of DGE genes from two way interaction mean?for gt21:trt on timepoint=49 at any treatment)
+##subsetting data based on timepoint=49 for two way interaction(gt*trt) 
+```{r}
+counts.final <- read.csv("../input/NAMparents.coutns.final.csv", row.names = 1)
+load("../input/NAMparents.samples.nolow.final.Rdata")
+head(counts.final)
+counts.final[is.na(counts.final)]<-0
+library("DESeq2")
+samples.nolow.final.s<-samples.nolow.final[samples.nolow.final$genotype== "23"|samples.nolow.final$genotype==21,]
+
+samples.nolow.final.s<-samples.nolow.final.s[samples.nolow.final.s$time=="49",] # only "49" timepoint
+samples.nolow.final.s$genotype<-as.factor(as.character(samples.nolow.final.s$genotype))
+samples.nolow.final.s$genotype<-relevel(samples.nolow.final.s$genotype,ref="23")
+counts.final.gt21time49 <- read.csv("../input/NAMparents.coutns.final.gt21time49.csv", row.names = 1)
+dds.final.gt21time49 <- DESeqDataSetFromMatrix(countData = round(counts.final.gt21time49), colData = samples.nolow.final.s, design = ~ genotype*trt+ batch)
+
+vst.final.gt21time49 <- varianceStabilizingTransformation(dds.final.gt21time49)
+vstMat.final.gt21time49 <- assay(vst.final.gt21time49)
+head(vstMat.final.gt21time49)
+dim(vstMat.final.gt21time49)
+# 1) trasform my dataset from wide to long format
+library(reshape2)
+vstMat.final.melt.gt21time49 <- melt(vstMat.final.gt21time49)
+head(vstMat.final.melt.gt21time49)
+tail(vstMat.final.melt.gt21time49)
+
+#2) get description for each factor of your VST normalized read count
+vstMat.final.melt.gt21time49$genotype<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\2",vstMat.final.melt.gt21time49$Var2))
+vstMat.final.melt.gt21time49$trt<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\3",vstMat.final.melt.gt21time49$Var2))
+vstMat.final.melt.gt21time49$time<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\4",vstMat.final.melt.gt21time49$Var2))
+# 3) get the mean across three biological replicate
+vstMat.final.melt.mean.gt21time49<-as.data.frame(tapply(vstMat.final.melt.gt21time49$value,list(vstMat.final.melt.gt21time49$Var1,vstMat.final.melt.gt21time49$genotype,vstMat.final.melt.gt21time49$trt,vstMat.final.melt.gt21time49$time),mean)) 
+colnames(vstMat.final.melt.mean.gt21time49)
+#modify colnames with gsub(the result of these two code are same) to have input file look like summary.vst file in Kazu data
+#gsub("*[\\. ] *", "", colnames(vstMat.final.melt.mean))
+#gsub("\\.","",colnames(vstMat.final.melt.mean))
+colnames(vstMat.final.melt.mean.gt21time49)<- gsub("\\.","",colnames(vstMat.final.melt.mean.gt21time49))
+rownames(vstMat.final.melt.mean.gt21time49)
+
+
+#now we want to draw expression pattern for all  DE genes in two way interaction gt:trt on timepoint=4
+load("../output/dge.nolow.final.glm.lrt.time4921.Rdata")
+DEgene.2.interaction.gt21time49 <-topTags(dge.nolow.final.glm.lrt,n=10000)$table[topTags(dge.nolow.final.glm.lrt,n=10000)$table$FDR<0.001,] 
+dim(DEgene.2.interaction.gt21time49) 
+order(DEgene.2.interaction.gt21time49$FDR)
+
+row.names(DEgene.2.interaction.gt21time49) #for first 30 genes out of 1878
+
+
+#draw expression pattern for each genes in all genotypes response to all levels of time in sun condition
+p21time49 <-expression.pattern.graph3.nam(vstMat.final.melt.mean.gt21time49,target.genes=rownames(DEgene.2.interaction.gt21time49)[1:30],plot.order=rownames(DEgene.2.interaction.gt21time49))
+
+p21time49
+ggsave(p21time49,file="../output/expression.pattern.graph.DEGthreeway.p21NAMparents.coutns.final.gt21time49.png",width=11,height=25)
+
+
+# we want to know what does expression pattern of DGE genes from two way interaction mean?for gt20:trt on timepoint=25 at any treatment)
+##subsetting data based on timepoint=25 for two way interaction(gt*trt) 
+```{r}
+counts.final <- read.csv("../input/NAMparents.coutns.final.csv", row.names = 1)
+load("../input/NAMparents.samples.nolow.final.Rdata")
+head(counts.final)
+counts.final[is.na(counts.final)]<-0
+library("DESeq2")
+samples.nolow.final.s<-samples.nolow.final[samples.nolow.final$genotype== "23"|samples.nolow.final$genotype==20,]
+
+samples.nolow.final.s<-samples.nolow.final.s[samples.nolow.final.s$time=="25",] # only "25" timepoint
+samples.nolow.final.s$genotype<-as.factor(as.character(samples.nolow.final.s$genotype))
+samples.nolow.final.s$genotype<-relevel(samples.nolow.final.s$genotype,ref="23")
+counts.final.gt20time25 <- read.csv("../input/NAMparents.coutns.final.gt20time25.csv", row.names = 1)
+dds.final.gt20time25 <- DESeqDataSetFromMatrix(countData = round(counts.final.gt20time25), colData = samples.nolow.final.s, design = ~ genotype*trt+ batch)
+
+vst.final.gt20time25 <- varianceStabilizingTransformation(dds.final.gt20time25)
+vstMat.final.gt20time25 <- assay(vst.final.gt20time25)
+head(vstMat.final.gt20time25)
+dim(vstMat.final.gt20time25)
+# 1) trasform my dataset from wide to long format
+library(reshape2)
+vstMat.final.melt.gt20time25 <- melt(vstMat.final.gt20time25)
+head(vstMat.final.melt.gt20time25)
+tail(vstMat.final.melt.gt20time25)
+
+#2) get description for each factor of your VST normalized read count
+vstMat.final.melt.gt20time25$genotype<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\2",vstMat.final.melt.gt20time25$Var2))
+vstMat.final.melt.gt20time25$trt<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\3",vstMat.final.melt.gt20time25$Var2))
+vstMat.final.melt.gt20time25$time<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\4",vstMat.final.melt.gt20time25$Var2))
+# 3) get the mean across three biological replicate
+vstMat.final.melt.mean.gt20time25<-as.data.frame(tapply(vstMat.final.melt.gt20time25$value,list(vstMat.final.melt.gt20time25$Var1,vstMat.final.melt.gt20time25$genotype,vstMat.final.melt.gt20time25$trt,vstMat.final.melt.gt20time25$time),mean)) 
+colnames(vstMat.final.melt.mean.gt20time25)
+#modify colnames with gsub(the result of these two code are same) to have input file look like summary.vst file in Kazu data
+#gsub("*[\\. ] *", "", colnames(vstMat.final.melt.mean))
+#gsub("\\.","",colnames(vstMat.final.melt.mean))
+colnames(vstMat.final.melt.mean.gt20time25)<- gsub("\\.","",colnames(vstMat.final.melt.mean.gt20time25))
+rownames(vstMat.final.melt.mean.gt20time25)
+
+
+#now we want to draw expression pattern for all  DE genes in two way interaction gt:trt on timepoint=4
+load("../output/dge.nolow.final.glm.lrt.time2520.Rdata")
+DEgene.2.interaction.gt20time25 <-topTags(dge.nolow.final.glm.lrt,n=10000)$table[topTags(dge.nolow.final.glm.lrt,n=10000)$table$FDR<0.001,] 
+dim(DEgene.2.interaction.gt20time25) 
+order(DEgene.2.interaction.gt20time25$FDR)
+
+row.names(DEgene.2.interaction.gt20time25) #for first 30 genes out of 2224
+
+
+#draw expression pattern for each genes in all genotypes response to all levels of time in sun condition
+p20time25 <-expression.pattern.graph3.nam(vstMat.final.melt.mean.gt20time25,target.genes=rownames(DEgene.2.interaction.gt20time25)[1:30],plot.order=rownames(DEgene.2.interaction.gt20time25))
+
+p20time25
+ggsave(p20time25,file="../output/expression.pattern.graph.DEGthreeway.p20NAMparents.coutns.final.gt20time25.png",width=11,height=25)
+
+
+# we want to know what does expression pattern of DGE genes from two way interaction mean?for gt21:trt on timepoint=25 at any treatment)
+##subsetting data based on timepoint=25 for two way interaction(gt*trt) 
+```{r}
+counts.final <- read.csv("../input/NAMparents.coutns.final.csv", row.names = 1)
+load("../input/NAMparents.samples.nolow.final.Rdata")
+head(counts.final)
+counts.final[is.na(counts.final)]<-0
+library("DESeq2")
+samples.nolow.final.s<-samples.nolow.final[samples.nolow.final$genotype== "23"|samples.nolow.final$genotype==21,]
+
+samples.nolow.final.s<-samples.nolow.final.s[samples.nolow.final.s$time=="25",] # only "25" timepoint
+samples.nolow.final.s$genotype<-as.factor(as.character(samples.nolow.final.s$genotype))
+samples.nolow.final.s$genotype<-relevel(samples.nolow.final.s$genotype,ref="23")
+counts.final.gt21time25 <- read.csv("../input/NAMparents.coutns.final.gt21time25.csv", row.names = 1)
+dds.final.gt21time25 <- DESeqDataSetFromMatrix(countData = round(counts.final.gt21time25), colData = samples.nolow.final.s, design = ~ genotype*trt+ batch)
+
+vst.final.gt21time25 <- varianceStabilizingTransformation(dds.final.gt21time25)
+vstMat.final.gt21time25 <- assay(vst.final.gt21time25)
+head(vstMat.final.gt21time25)
+dim(vstMat.final.gt21time25)
+# 1) trasform my dataset from wide to long format
+library(reshape2)
+vstMat.final.melt.gt21time25 <- melt(vstMat.final.gt21time25)
+head(vstMat.final.melt.gt21time25)
+tail(vstMat.final.melt.gt21time25)
+
+#2) get description for each factor of your VST normalized read count
+vstMat.final.melt.gt21time25$genotype<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\2",vstMat.final.melt.gt21time25$Var2))
+vstMat.final.melt.gt21time25$trt<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\3",vstMat.final.melt.gt21time25$Var2))
+vstMat.final.melt.gt21time25$time<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\4",vstMat.final.melt.gt21time25$Var2))
+# 3) get the mean across three biological replicate
+vstMat.final.melt.mean.gt21time25<-as.data.frame(tapply(vstMat.final.melt.gt21time25$value,list(vstMat.final.melt.gt21time25$Var1,vstMat.final.melt.gt21time25$genotype,vstMat.final.melt.gt21time25$trt,vstMat.final.melt.gt21time25$time),mean)) 
+colnames(vstMat.final.melt.mean.gt21time25)
+#modify colnames with gsub(the result of these two code are same) to have input file look like summary.vst file in Kazu data
+#gsub("*[\\. ] *", "", colnames(vstMat.final.melt.mean))
+#gsub("\\.","",colnames(vstMat.final.melt.mean))
+colnames(vstMat.final.melt.mean.gt21time25)<- gsub("\\.","",colnames(vstMat.final.melt.mean.gt21time25))
+rownames(vstMat.final.melt.mean.gt21ime25)
+
+
+#now we want to draw expression pattern for all  DE genes in two way interaction gt:trt on timepoint=4
+load("../output/dge.nolow.final.glm.lrt.time2521.Rdata")
+DEgene.2.interaction.gt21time25 <-topTags(dge.nolow.final.glm.lrt,n=10000)$table[topTags(dge.nolow.final.glm.lrt,n=10000)$table$FDR<0.001,] 
+dim(DEgene.2.interaction.gt21time25) 
+order(DEgene.2.interaction.gt21time25$FDR)
+
+row.names(DEgene.2.interaction.gt21time25) #for first 30 genes out of 1762
+
+
+#draw expression pattern for each genes in all genotypes response to all levels of time in sun condition
+p21time25 <-expression.pattern.graph3.nam(vstMat.final.melt.mean.gt21time25,target.genes=rownames(DEgene.2.interaction.gt21time25)[1:30],plot.order=rownames(DEgene.2.interaction.gt21time25))
+
+p21time25
+ggsave(p21time25,file="../output/expression.pattern.graph.DEGthreeway.p21NAMparents.coutns.final.gt21time25.png",width=11,height=25)
+
+
+# we want to know what does expression pattern of DGE genes from two way interaction mean?for gt20:trt on timepoint=16 at any treatment)
+##subsetting data based on timepoint=1 for two way interaction(gt*trt) 
+```{r}
+counts.final <- read.csv("../input/NAMparents.coutns.final.csv", row.names = 1)
+load("../input/NAMparents.samples.nolow.final.Rdata")
+head(counts.final)
+counts.final[is.na(counts.final)]<-0
+library("DESeq2")
+samples.nolow.final.s<-samples.nolow.final[samples.nolow.final$genotype== "23"|samples.nolow.final$genotype==20,]
+
+samples.nolow.final.s<-samples.nolow.final.s[samples.nolow.final.s$time=="1",] # only "1" timepoint
+samples.nolow.final.s$genotype<-as.factor(as.character(samples.nolow.final.s$genotype))
+samples.nolow.final.s$genotype<-relevel(samples.nolow.final.s$genotype,ref="23")
+counts.final.gt20time16 <- read.csv("../input/NAMparents.coutns.final.gt20time1.csv", row.names = 1)
+dds.final.gt20time16 <- DESeqDataSetFromMatrix(countData = round(counts.final.gt20time16), colData = samples.nolow.final.s, design = ~ genotype*trt+ batch)
+
+vst.final.gt20time16 <- varianceStabilizingTransformation(dds.final.gt20time16)
+vstMat.final.gt20time16 <- assay(vst.final.gt20time16)
+head(vstMat.final.gt20time16)
+dim(vstMat.final.gt20time16)
+# 1) trasform my dataset from wide to long format
+library(reshape2)
+vstMat.final.melt.gt20time16 <- melt(vstMat.final.gt20time16)
+head(vstMat.final.melt.gt20time16)
+tail(vstMat.final.melt.gt20time16)
+
+#2) get description for each factor of your VST normalized read count
+vstMat.final.melt.gt20time16$genotype<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\2",vstMat.final.melt.gt20time16$Var2))
+vstMat.final.melt.gt20time16$trt<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\3",vstMat.final.melt.gt20time16$Var2))
+vstMat.final.melt.gt20time16$time<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\4",vstMat.final.melt.gt20time16$Var2))
+# 3) get the mean across three biological replicate
+vstMat.final.melt.mean.gt20time16<-as.data.frame(tapply(vstMat.final.melt.gt20time16$value,list(vstMat.final.melt.gt20time16$Var1,vstMat.final.melt.gt20time16$genotype,vstMat.final.melt.gt20time16$trt,vstMat.final.melt.gt20time16$time),mean)) 
+colnames(vstMat.final.melt.mean.gt20time16)
+#modify colnames with gsub(the result of these two code are same) to have input file look like summary.vst file in Kazu data
+#gsub("*[\\. ] *", "", colnames(vstMat.final.melt.mean))
+#gsub("\\.","",colnames(vstMat.final.melt.mean))
+colnames(vstMat.final.melt.mean.gt20time16)<- gsub("\\.","",colnames(vstMat.final.melt.mean.gt20time16))
+rownames(vstMat.final.melt.mean.gt20time16)
+
+
+#now we want to draw expression pattern for all  DE genes in two way interaction gt:trt on timepoint=4
+load("../output/dge.nolow.final.glm.lrt.time1620.Rdata")
+DEgene.2.interaction.gt21time25 <-topTags(dge.nolow.final.glm.lrt,n=10000)$table[topTags(dge.nolow.final.glm.lrt,n=10000)$table$FDR<0.001,] 
+dim(DEgene.2.interaction.gt21time25) 
+order(DEgene.2.interaction.gt21time25$FDR)
+
+row.names(DEgene.2.interaction.gt21time25) #for first 30 genes out of 1762
+
+
+#draw expression pattern for each genes in all genotypes response to all levels of time in sun condition
+p21time25 <-expression.pattern.graph3.nam(vstMat.final.melt.mean.gt21time25,target.genes=rownames(DEgene.2.interaction.gt21time25)[1:30],plot.order=rownames(DEgene.2.interaction.gt21time25))
+
+p21time25
+ggsave(p21time25,file="../output/expression.pattern.graph.DEGthreeway.p21NAMparents.coutns.final.gt21time25.png",width=11,height=25)
+
+
+#Julin and Kazu comment: here is the plot expression pattern of shade avoidance marker genes: PIL1 ("AT2G46970"), ATHB2("AT4G16780"), IAA29 ("AT4G32280"). The value is log2cpm
+
+load("../input/NAMparents.samples.nolow.final.Rdata")
+counts.final <- read.csv("../input/NAMparents.coutns.final.csv", row.names = 1)
+
+library(edgeR)
+dge.nolow <- DGEList(counts=counts.final,group=samples.nolow.final$group) 
+head(counts.final)
+length(colnames(counts.final)) #197
+dge.nolow<-calcNormFactors(dge.nolow, method = "TMM")
+# look at the normalization factors
+temp<-log2(cpm(dge.nolow))
+hist(temp)
+#temp<- cpm(dge.nolow, log=TRUE)
+#checking expression pattern with raw count data
+counts.final
+dim(counts.final)
+shade.avoidence.genes.counts<- counts.final[c("AT2G46970.1", "AT4G16780.1", "AT4G32280.1"),]
+#convert row and column for better understanding
+t.shade.avoidence.genes.counts <- as.data.frame(t(shade.avoidence.genes.counts))
+t.shade.avoidence.genes.counts$gt <- gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\2",rownames(t.shade.avoidence.genes.counts))
+t.shade.avoidence.genes.counts$trt <- gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\3",rownames(t.shade.avoidence.genes.counts))
+t.shade.avoidence.genes.counts$time <- gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A", "\\4", rownames(t.shade.avoidence.genes.counts))
+head(t.shade.avoidence.genes.counts)
+#visulize 
+library(ggplot2)
+mt.shade.avoidence.genes.counts <- melt(t.shade.avoidence.genes.counts)
+mt.shade.avoidence.genes.counts
+ggplot(mt.shade.avoidence.genes.counts, aes(gt, value)) +
+  geom_boxplot(aes(color = trt)) +
+  facet_grid(time ~ variable) +
+  #change facet and reorder x-axis
+  ggplot(mt.shade.avoidence.genes.counts, aes(time, value)) +
+  geom_boxplot(aes(color = trt)) +
+  facet_grid(gt ~ variable) +
+  scale_x_discrete(limits=c("1","4","16","25","49"))
+#subsetting shade avoidance genes
+shade.avoidence.genes.temp<- temp[c("AT2G46970.1", "AT4G16780.1", "AT4G32280.1"),]
+#convert row and column for better understanding
+t.shade.avoidence.genes.temp <- as.data.frame(t(shade.avoidence.genes.temp))
+t.shade.avoidence.genes.temp$gt <- gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\2",rownames(t.shade.avoidence.genes.temp))
+t.shade.avoidence.genes.temp$trt <- gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\3",rownames(t.shade.avoidence.genes.temp))
+t.shade.avoidence.genes.temp$time <- gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A", "\\4", rownames(t.shade.avoidence.genes.temp))
+head(t.shade.avoidence.genes.temp)
+#visulize 
+library(ggplot2)
+mt.shade.avoidence.genes.temp <- melt(t.shade.avoidence.genes.temp)
+mt.shade.avoidence.genes.temp
+ggplot(mt.shade.avoidence.genes.temp, aes(gt, value)) +
+  geom_boxplot(aes(color = trt)) +
+  facet_grid(time ~ variable) +
+  #change facet and reorder x-axis
+  ggplot(mt.shade.avoidence.genes.temp, aes(time, value)) +
+  geom_boxplot(aes(color = trt)) +
+  facet_grid(gt ~ variable) +
+  scale_x_discrete(limits=c("1","4","16","25","49"))
+######
+#we want to see the DE at any time point (shade)
+#subsetting data based on shade treatment for two way interaction(gt*time)1, 4, 16, 25, 49
+
+head(samples.nolow.final)
+str(samples.nolow.final)
+load("../output/dge.nolow.final.Rdata")
+genotype<-levels(as.factor(samples.nolow.final$genotype))
+
+samples.nolow.final.s<-samples.nolow.final[samples.nolow.final$genotype== "23"|samples.nolow.final$genotype==21,]
+
+samples.nolow.final.s<-samples.nolow.final.s[samples.nolow.final.s$trt=="H",] # only "sun" treatment
+samples.nolow.final.s$genotype<-as.factor(as.character(samples.nolow.final.s$genotype))
+samples.nolow.final.s$genotype<-relevel(samples.nolow.final.s$genotype,ref="23")
+dge.nolow.final.s<-dge.nolow.final[,colnames(dge.nolow.final) %in% samples.nolow.final.s$file]
+# eliminating low expressed genes in dge.final.s
+dge.nolow.final.s<-dge.nolow.final.s[rowSums(dge.nolow.final.s$counts > 5) >= 3,]
+design2.nolow.final<- model.matrix(~genotype*time+ batch, data=samples.nolow.final.s) 
+# new model to detect genes with gt*time effects 
+colnames(design2.nolow.final) <- gsub("samples.nolow.final.s$","",colnames(design2.nolow.final),fixed=TRUE) 
+# nicer column names
+colnames(design2.nolow.final)
+print(design2.nolow.final)
+dge.nolow.final.s.glm <- estimateGLMCommonDisp(dge.nolow.final.s,design2.nolow.final, verbose=T)
+dge.nolow.final.s.glm <- estimateGLMTrendedDisp(dge.nolow.final.s.glm ,design2.nolow.final, verbose=TRUE)
+dge.nolow.final.s.glm<-estimateGLMTagwiseDisp(dge.nolow.final.s.glm ,design2.nolow.final)
+dge.nolow.final.s.glm.fit <- glmFit(dge.nolow.final.s.glm,design2.nolow.final)
+
+genotype21.alltime.coef<-c(paste("genotype",21,sep=""),paste("genotype",21,":time4",sep=""),paste("genotype",21,":time16",sep=""),paste("genotype",21,":time25",sep=""),paste("genotype",21,":time49",sep=""))
+
+dge.nolow.final.glm.lrt21H <- glmLRT(dge.nolow.final.s.glm.fit,coef= genotype21.alltime.coef)
+
+
+DEgene.2.interaction.21H<-topTags(dge.nolow.final.glm.lrt21H,n=10000)$table[topTags(dge.nolow.final.glm.lrt21H,n=10000)$table$FDR<0.001,] 
+dim(DEgene.2.interaction.21H) 
+
+save(dge.nolow.final.glm.lrt21H ,file=("../output_dge.nolow.final.glm.lrt_gt_seperately/dge.nolow.final.glm.lrt21H.Rdata"))
+
+#
+samples.nolow.final.s<-samples.nolow.final[samples.nolow.final$genotype== "23"|samples.nolow.final$genotype==22,]
+
+samples.nolow.final.s<-samples.nolow.final.s[samples.nolow.final.s$trt=="H",] # only "sun" treatment
+samples.nolow.final.s$genotype<-as.factor(as.character(samples.nolow.final.s$genotype))
+samples.nolow.final.s$genotype<-relevel(samples.nolow.final.s$genotype,ref="23")
+dge.nolow.final.s<-dge.nolow.final[,colnames(dge.nolow.final) %in% samples.nolow.final.s$file]
+# eliminating low expressed genes in dge.final.s
+dge.nolow.final.s<-dge.nolow.final.s[rowSums(dge.nolow.final.s$counts > 5) >= 3,]
+design2.nolow.final<- model.matrix(~genotype*time+ batch, data=samples.nolow.final.s) 
+# new model to detect genes with gt*time effects 
+colnames(design2.nolow.final) <- gsub("samples.nolow.final.s$","",colnames(design2.nolow.final),fixed=TRUE) 
+# nicer column names
+colnames(design2.nolow.final)
+print(design2.nolow.final)
+dge.nolow.final.s.glm <- estimateGLMCommonDisp(dge.nolow.final.s,design2.nolow.final, verbose=T)
+dge.nolow.final.s.glm <- estimateGLMTrendedDisp(dge.nolow.final.s.glm ,design2.nolow.final, verbose=TRUE)
+dge.nolow.final.s.glm<-estimateGLMTagwiseDisp(dge.nolow.final.s.glm ,design2.nolow.final)
+dge.nolow.final.s.glm.fit <- glmFit(dge.nolow.final.s.glm,design2.nolow.final)
+
+genotype22.alltime.coef<-c(paste("genotype",22,sep=""),paste("genotype",22,":time4",sep=""),paste("genotype",22,":time16",sep=""),paste("genotype",22,":time25",sep=""),paste("genotype",22,":time49",sep=""))
+
+dge.nolow.final.glm.lrt22H <- glmLRT(dge.nolow.final.s.glm.fit,coef= genotype22.alltime.coef)
+
+
+DEgene.2.interaction.22H<-topTags(dge.nolow.final.glm.lrt22H,n=10000)$table[topTags(dge.nolow.final.glm.lrt22H,n=10000)$table$FDR<0.001,] 
+dim(DEgene.2.interaction.22H) 
+
+save(dge.nolow.final.glm.lrt22H ,file=("../output_dge.nolow.final.glm.lrt_gt_seperately/dge.nolow.final.glm.lrt22H.Rdata"))
+
+###
+
+samples.nolow.final.s<-samples.nolow.final[samples.nolow.final$genotype== "23"|samples.nolow.final$genotype==24,]
+
+samples.nolow.final.s<-samples.nolow.final.s[samples.nolow.final.s$trt=="H",] # only "sun" treatment
+samples.nolow.final.s$genotype<-as.factor(as.character(samples.nolow.final.s$genotype))
+samples.nolow.final.s$genotype<-relevel(samples.nolow.final.s$genotype,ref="23")
+dge.nolow.final.s<-dge.nolow.final[,colnames(dge.nolow.final) %in% samples.nolow.final.s$file]
+# eliminating low expressed genes in dge.final.s
+dge.nolow.final.s<-dge.nolow.final.s[rowSums(dge.nolow.final.s$counts > 5) >= 3,]
+design2.nolow.final<- model.matrix(~genotype*time+ batch, data=samples.nolow.final.s) 
+# new model to detect genes with gt*time effects 
+colnames(design2.nolow.final) <- gsub("samples.nolow.final.s$","",colnames(design2.nolow.final),fixed=TRUE) 
+# nicer column names
+colnames(design2.nolow.final)
+print(design2.nolow.final)
+dge.nolow.final.s.glm <- estimateGLMCommonDisp(dge.nolow.final.s,design2.nolow.final, verbose=T)
+dge.nolow.final.s.glm <- estimateGLMTrendedDisp(dge.nolow.final.s.glm ,design2.nolow.final, verbose=TRUE)
+dge.nolow.final.s.glm<-estimateGLMTagwiseDisp(dge.nolow.final.s.glm ,design2.nolow.final)
+dge.nolow.final.s.glm.fit <- glmFit(dge.nolow.final.s.glm,design2.nolow.final)
+
+genotype24.alltime.coef<-c(paste("genotype",24,sep=""),paste("genotype",24,":time4",sep=""),paste("genotype",24,":time16",sep=""),paste("genotype",24,":time25",sep=""),paste("genotype",24,":time49",sep=""))
+
+dge.nolow.final.glm.lrt24H <- glmLRT(dge.nolow.final.s.glm.fit,coef= genotype24.alltime.coef)
+
+
+DEgene.2.interaction.24H<-topTags(dge.nolow.final.glm.lrt24H,n=10000)$table[topTags(dge.nolow.final.glm.lrt24H,n=10000)$table$FDR<0.001,] 
+dim(DEgene.2.interaction.24H) 
+
+save(dge.nolow.final.glm.lrt24H ,file=("../output_dge.nolow.final.glm.lrt_gt_seperately/dge.nolow.final.glm.lrt24H.Rdata"))
+
+####
+
+samples.nolow.final.s<-samples.nolow.final[samples.nolow.final$genotype== "23"|samples.nolow.final$genotype==25,]
+
+samples.nolow.final.s<-samples.nolow.final.s[samples.nolow.final.s$trt=="H",] # only "sun" treatment
+samples.nolow.final.s$genotype<-as.factor(as.character(samples.nolow.final.s$genotype))
+samples.nolow.final.s$genotype<-relevel(samples.nolow.final.s$genotype,ref="23")
+dge.nolow.final.s<-dge.nolow.final[,colnames(dge.nolow.final) %in% samples.nolow.final.s$file]
+# eliminating low expressed genes in dge.final.s
+dge.nolow.final.s<-dge.nolow.final.s[rowSums(dge.nolow.final.s$counts > 5) >= 3,]
+design2.nolow.final<- model.matrix(~genotype*time+ batch, data=samples.nolow.final.s) 
+# new model to detect genes with gt*time effects 
+colnames(design2.nolow.final) <- gsub("samples.nolow.final.s$","",colnames(design2.nolow.final),fixed=TRUE) 
+# nicer column names
+colnames(design2.nolow.final)
+print(design2.nolow.final)
+dge.nolow.final.s.glm <- estimateGLMCommonDisp(dge.nolow.final.s,design2.nolow.final, verbose=T)
+dge.nolow.final.s.glm <- estimateGLMTrendedDisp(dge.nolow.final.s.glm ,design2.nolow.final, verbose=TRUE)
+dge.nolow.final.s.glm<-estimateGLMTagwiseDisp(dge.nolow.final.s.glm ,design2.nolow.final)
+dge.nolow.final.s.glm.fit <- glmFit(dge.nolow.final.s.glm,design2.nolow.final)
+
+genotype25.alltime.coef<-c(paste("genotype",25,sep=""),paste("genotype",25,":time4",sep=""),paste("genotype",25,":time16",sep=""),paste("genotype",25,":time25",sep=""),paste("genotype",25,":time49",sep=""))
+
+dge.nolow.final.glm.lrt25H <- glmLRT(dge.nolow.final.s.glm.fit,coef= genotype25.alltime.coef)
+
+
+DEgene.2.interaction.25H<-topTags(dge.nolow.final.glm.lrt25H,n=10000)$table[topTags(dge.nolow.final.glm.lrt25H,n=10000)$table$FDR<0.001,] 
+dim(DEgene.2.interaction.25H) 
+
+save(dge.nolow.final.glm.lrt25H ,file=("../output_dge.nolow.final.glm.lrt_gt_seperately/dge.nolow.final.glm.lrt25H.Rdata"))
+
+####
+
+samples.nolow.final.s<-samples.nolow.final[samples.nolow.final$genotype== "23"|samples.nolow.final$genotype==26,]
+
+samples.nolow.final.s<-samples.nolow.final.s[samples.nolow.final.s$trt=="H",] # only "sun" treatment
+samples.nolow.final.s$genotype<-as.factor(as.character(samples.nolow.final.s$genotype))
+samples.nolow.final.s$genotype<-relevel(samples.nolow.final.s$genotype,ref="23")
+dge.nolow.final.s<-dge.nolow.final[,colnames(dge.nolow.final) %in% samples.nolow.final.s$file]
+# eliminating low expressed genes in dge.final.s
+dge.nolow.final.s<-dge.nolow.final.s[rowSums(dge.nolow.final.s$counts > 5) >= 3,]
+design2.nolow.final<- model.matrix(~genotype*time+ batch, data=samples.nolow.final.s) 
+# new model to detect genes with gt*time effects 
+colnames(design2.nolow.final) <- gsub("samples.nolow.final.s$","",colnames(design2.nolow.final),fixed=TRUE) 
+# nicer column names
+colnames(design2.nolow.final)
+print(design2.nolow.final)
+dge.nolow.final.s.glm <- estimateGLMCommonDisp(dge.nolow.final.s,design2.nolow.final, verbose=T)
+dge.nolow.final.s.glm <- estimateGLMTrendedDisp(dge.nolow.final.s.glm ,design2.nolow.final, verbose=TRUE)
+dge.nolow.final.s.glm<-estimateGLMTagwiseDisp(dge.nolow.final.s.glm ,design2.nolow.final)
+dge.nolow.final.s.glm.fit <- glmFit(dge.nolow.final.s.glm,design2.nolow.final)
+
+genotype26.alltime.coef<-c(paste("genotype",26,sep=""),paste("genotype",26,":time4",sep=""),paste("genotype",26,":time16",sep=""),paste("genotype",26,":time25",sep=""),paste("genotype",26,":time49",sep=""))
+
+dge.nolow.final.glm.lrt26H <- glmLRT(dge.nolow.final.s.glm.fit,coef= genotype26.alltime.coef)
+
+
+DEgene.2.interaction.26H<-topTags(dge.nolow.final.glm.lrt26H,n=10000)$table[topTags(dge.nolow.final.glm.lrt26H,n=10000)$table$FDR<0.001,] 
+dim(DEgene.2.interaction.26H) 
+
+save(dge.nolow.final.glm.lrt26H ,file=("../output_dge.nolow.final.glm.lrt_gt_seperately/dge.nolow.final.glm.lrt26H.Rdata"))
+
+
+####
+samples.nolow.final.s<-samples.nolow.final[samples.nolow.final$genotype== "23"|samples.nolow.final$genotype==27,]
+
+samples.nolow.final.s<-samples.nolow.final.s[samples.nolow.final.s$trt=="H",] # only "sun" treatment
+samples.nolow.final.s$genotype<-as.factor(as.character(samples.nolow.final.s$genotype))
+samples.nolow.final.s$genotype<-relevel(samples.nolow.final.s$genotype,ref="23")
+dge.nolow.final.s<-dge.nolow.final[,colnames(dge.nolow.final) %in% samples.nolow.final.s$file]
+# eliminating low expressed genes in dge.final.s
+dge.nolow.final.s<-dge.nolow.final.s[rowSums(dge.nolow.final.s$counts > 5) >= 3,]
+design2.nolow.final<- model.matrix(~genotype*time+ batch, data=samples.nolow.final.s) 
+# new model to detect genes with gt*time effects 
+colnames(design2.nolow.final) <- gsub("samples.nolow.final.s$","",colnames(design2.nolow.final),fixed=TRUE) 
+# nicer column names
+colnames(design2.nolow.final)
+print(design2.nolow.final)
+dge.nolow.final.s.glm <- estimateGLMCommonDisp(dge.nolow.final.s,design2.nolow.final, verbose=T)
+dge.nolow.final.s.glm <- estimateGLMTrendedDisp(dge.nolow.final.s.glm ,design2.nolow.final, verbose=TRUE)
+dge.nolow.final.s.glm<-estimateGLMTagwiseDisp(dge.nolow.final.s.glm ,design2.nolow.final)
+dge.nolow.final.s.glm.fit <- glmFit(dge.nolow.final.s.glm,design2.nolow.final)
+
+genotype27.alltime.coef<-c(paste("genotype",27,sep=""),paste("genotype",27,":time4",sep=""),paste("genotype",27,":time16",sep=""),paste("genotype",27,":time25",sep=""),paste("genotype",27,":time49",sep=""))
+
+dge.nolow.final.glm.lrt27H <- glmLRT(dge.nolow.final.s.glm.fit,coef= genotype27.alltime.coef)
+
+
+DEgene.2.interaction.27H<-topTags(dge.nolow.final.glm.lrt27H,n=10000)$table[topTags(dge.nolow.final.glm.lrt27H,n=10000)$table$FDR<0.001,] 
+dim(DEgene.2.interaction.27H) 
+
+save(dge.nolow.final.glm.lrt27H ,file=("../output_dge.nolow.final.glm.lrt_gt_seperately/dge.nolow.final.glm.lrt27H.Rdata"))
+
+
+DEGs_number_two_ways_gt_time_sun <- data.frame ("20.H" = as.data.frame(summary(decideTestsDGE(dge.nolow.final.glm.lrt20H, p=0.05)))$Freq,
+                                                "21.H" = as.data.frame(summary(decideTestsDGE(dge.nolow.final.glm.lrt21H, p=0.05)))$Freq, 
+                                                "22.H" = as.data.frame(summary(decideTestsDGE(dge.nolow.final.glm.lrt22H, p=0.05)))$Freq,
+                                                "24.H" = as.data.frame(summary(decideTestsDGE(dge.nolow.final.glm.lrt24H, p=0.05)))$Freq,
+                                                "25.H" = as.data.frame(summary(decideTestsDGE(dge.nolow.final.glm.lrt25H, p=0.05)))$Freq,
+                                                "26.H" = as.data.frame(summary(decideTestsDGE(dge.nolow.final.glm.lrt26H, p=0.05)))$Freq, 
+                                                "27.H" = as.data.frame(summary(decideTestsDGE(dge.nolow.final.glm.lrt27H, p=0.05)))$Freq)
+
+
+DEGs_number_two_ways_gt_time_sun
+rownames(DEGs_number_two_ways_gt_time_sun) <- c("no", "up")
+DEGs_number_two_ways_gt_time_sun <- DEGs_number_two_ways_gt_time_sun["up",]
+
+save(DEGs_number_two_ways_gt_time_sun, file = "../output_dge.nolow.final.glm.lrt_gt_seperately/DEGs_number_two_ways_gt_time_sun.Rdata")
+```
+load("../output_dge.nolow.final.glm.lrt_gt_seperately/DEGs_number_two_ways_gt_time_sun.Rdata")
+```{r}
+library(reshape2)
+library(ggplot2)
+DEGs_number_two_ways_gt_time_sun.melt <- melt(DEGs_number_two_ways_gt_time_sun)
+DEGs_number_two_ways_gt_time_sun.melt$DE <- rep(("up"), 7)
+colnames(DEGs_number_two_ways_gt_time_sun.melt) <- c("genotype", "number", "DE")
+DEGs_number_two_ways_gt_time_sun.melt
+
+# reorder: up 1st down 2nd 
+#DEGs_number_between_gt_trt_time.melt$DE <- factor(DEGs_number_two_ways_gt_time_sun.melt$DE, levels = "up")
+
+DEGs_number_two_ways_gt_time_sun.melt <- DEGs_number_two_ways_gt_time_sun.melt[order(DEGs_number_two_ways_gt_time_sun.melt$DE),]
+DEGs_number_two_ways_gt_time_sun.melt
+head(DEGs_number_two_ways_gt_time_sun.melt)
+
+DEGs_number_two_ways_gt_time_sun.melt$gt <- gsub("(X)([[:digit:]]+)(\\.)(L)(\\.)(4|16|25|49)", "\\2",DEGs_number_two_ways_gt_time_sun.melt$genotype)
+
+DEGs_number_two_ways_gt_time_sun.melt$time <- gsub("(X)([[:digit:]]+)(\\.)(L)(\\.)(4|16|25|49)", "\\6",DEGs_number_two_ways_gt_time_sun.melt$genotype)
+### making ggplot for DEGs
+library(ggplot2)
+p.DEGs_number_two_ways_gt_time_sun <- ggplot(data = DEGs_number_two_ways_gt_time_sun.melt)
+p.DEGs_number_two_ways_gt_time_sun <- p.DEGs_number_two_ways_gt_time_sun + geom_bar(mapping = aes(fill=DE, x = factor(DE), y = number) , stat= "identity")
+p.DEGs_number_two_ways_gt_time_sun <- p.DEGs_number_two_ways_gt_time_sun + facet_grid(~time) 
+p.DEGs_number_two_ways_gt_time_sun<- p.DEGs_number_two_ways_gt_time_sun + labs(y = "number of differentially expressed genes", x = "")
+p.DEGs_number_two_ways_gt_time_sun
+ggsave(p.DEGs_number_two_ways_gt_time_sun, filename = "../output_dge.nolow.final.glm.lrt_gt_seperately/p.DEGs_number_two_ways_gt_time_sun.png", height = 11, width = 25)
+
+
+######
+#DE at any time point (shade)
+##subsetting data based on shade treatment for two way interaction(gt*time)
+
+load("../input/NAMparents.samples.nolow.final.Rdata")
+head(samples.nolow.final)
+str(samples.nolow.final)
+load("../output/dge.nolow.final.Rdata")
+genotype<-levels(as.factor(samples.nolow.final$genotype))
+
+samples.nolow.final.s<-samples.nolow.final[samples.nolow.final$genotype== "23"|samples.nolow.final$genotype==20,]
+
+samples.nolow.final.s<-samples.nolow.final.s[samples.nolow.final.s$trt=="L",] # only "shade" treatment
+samples.nolow.final.s$genotype<-as.factor(as.character(samples.nolow.final.s$genotype))
+samples.nolow.final.s$genotype<-relevel(samples.nolow.final.s$genotype,ref="23")
+dge.nolow.final.s<-dge.nolow.final[,colnames(dge.nolow.final) %in% samples.nolow.final.s$file]
+# eliminating low expressed genes in dge.final.s
+dge.nolow.final.s<-dge.nolow.final.s[rowSums(dge.nolow.final.s$counts > 5) >= 3,]
+design2.nolow.final<- model.matrix(~genotype*time+ batch, data=samples.nolow.final.s) 
+# new model to detect genes with gt*time effects 
+colnames(design2.nolow.final) <- gsub("samples.nolow.final.s$","",colnames(design2.nolow.final),fixed=TRUE) 
+# nicer column names
+colnames(design2.nolow.final)
+print(design2.nolow.final)
+dge.nolow.final.s.glm <- estimateGLMCommonDisp(dge.nolow.final.s,design2.nolow.final, verbose=T)
+dge.nolow.final.s.glm <- estimateGLMTrendedDisp(dge.nolow.final.s.glm ,design2.nolow.final, verbose=TRUE)
+dge.nolow.final.s.glm<-estimateGLMTagwiseDisp(dge.nolow.final.s.glm ,design2.nolow.final)
+dge.nolow.final.s.glm.fit <- glmFit(dge.nolow.final.s.glm,design2.nolow.final)
+
+genotype20.alltime.coef<-c(paste("genotype",20,sep=""),paste("genotype",20,":time4",sep=""),paste("genotype",20,":time16",sep=""),paste("genotype",20,":time25",sep=""),paste("genotype",20,":time49",sep=""))
+
+dge.nolow.final.glm.lrt20L <- glmLRT(dge.nolow.final.s.glm.fit,coef= genotype20.alltime.coef)
+
+
+DEgene.2.interaction.20L<-topTags(dge.nolow.final.glm.lrt20L,n=10000)$table[topTags(dge.nolow.final.glm.lrt20L,n=10000)$table$FDR<0.001,] 
+dim(DEgene.2.interaction.21H) 
+
+save(dge.nolow.final.glm.lrt20L ,file=("../output_dge.nolow.final.glm.lrt_gt_seperately/dge.nolow.final.glm.lrt20L.Rdata"))
+
+###
+samples.nolow.final.s<-samples.nolow.final[samples.nolow.final$genotype== "23"|samples.nolow.final$genotype==21,]
+
+samples.nolow.final.s<-samples.nolow.final.s[samples.nolow.final.s$trt=="L",] # only "shade" treatment
+samples.nolow.final.s$genotype<-as.factor(as.character(samples.nolow.final.s$genotype))
+samples.nolow.final.s$genotype<-relevel(samples.nolow.final.s$genotype,ref="23")
+dge.nolow.final.s<-dge.nolow.final[,colnames(dge.nolow.final) %in% samples.nolow.final.s$file]
+# eliminating low expressed genes in dge.final.s
+dge.nolow.final.s<-dge.nolow.final.s[rowSums(dge.nolow.final.s$counts > 5) >= 3,]
+design2.nolow.final<- model.matrix(~genotype*time+ batch, data=samples.nolow.final.s) 
+# new model to detect genes with gt*time effects 
+colnames(design2.nolow.final) <- gsub("samples.nolow.final.s$","",colnames(design2.nolow.final),fixed=TRUE) 
+# nicer column names
+colnames(design2.nolow.final)
+print(design2.nolow.final)
+dge.nolow.final.s.glm <- estimateGLMCommonDisp(dge.nolow.final.s,design2.nolow.final, verbose=T)
+dge.nolow.final.s.glm <- estimateGLMTrendedDisp(dge.nolow.final.s.glm ,design2.nolow.final, verbose=TRUE)
+dge.nolow.final.s.glm<-estimateGLMTagwiseDisp(dge.nolow.final.s.glm ,design2.nolow.final)
+dge.nolow.final.s.glm.fit <- glmFit(dge.nolow.final.s.glm,design2.nolow.final)
+
+genotype21.alltime.coef<-c(paste("genotype",21,sep=""),paste("genotype",21,":time4",sep=""),paste("genotype",21,":time16",sep=""),paste("genotype",21,":time25",sep=""),paste("genotype",21,":time49",sep=""))
+
+dge.nolow.final.glm.lrt21L <- glmLRT(dge.nolow.final.s.glm.fit,coef= genotype21.alltime.coef)
+
+
+DEgene.2.interaction.21L<-topTags(dge.nolow.final.glm.lrt21L,n=10000)$table[topTags(dge.nolow.final.glm.lrt21L,n=10000)$table$FDR<0.001,] 
+dim(DEgene.2.interaction.21L) 
+
+save(dge.nolow.final.glm.lrt21L ,file=("../output_dge.nolow.final.glm.lrt_gt_seperately/dge.nolow.final.glm.lrt21L.Rdata"))
+
+####
+samples.nolow.final.s<-samples.nolow.final[samples.nolow.final$genotype== "23"|samples.nolow.final$genotype==22,]
+
+samples.nolow.final.s<-samples.nolow.final.s[samples.nolow.final.s$trt=="L",] # only "sun" treatment
+samples.nolow.final.s$genotype<-as.factor(as.character(samples.nolow.final.s$genotype))
+samples.nolow.final.s$genotype<-relevel(samples.nolow.final.s$genotype,ref="23")
+dge.nolow.final.s<-dge.nolow.final[,colnames(dge.nolow.final) %in% samples.nolow.final.s$file]
+# eliminating low expressed genes in dge.final.s
+dge.nolow.final.s<-dge.nolow.final.s[rowSums(dge.nolow.final.s$counts > 5) >= 3,]
+design2.nolow.final<- model.matrix(~genotype*time+ batch, data=samples.nolow.final.s) 
+# new model to detect genes with gt*time effects 
+colnames(design2.nolow.final) <- gsub("samples.nolow.final.s$","",colnames(design2.nolow.final),fixed=TRUE) 
+# nicer column names
+colnames(design2.nolow.final)
+print(design2.nolow.final)
+dge.nolow.final.s.glm <- estimateGLMCommonDisp(dge.nolow.final.s,design2.nolow.final, verbose=T)
+dge.nolow.final.s.glm <- estimateGLMTrendedDisp(dge.nolow.final.s.glm ,design2.nolow.final, verbose=TRUE)
+dge.nolow.final.s.glm<-estimateGLMTagwiseDisp(dge.nolow.final.s.glm ,design2.nolow.final)
+dge.nolow.final.s.glm.fit <- glmFit(dge.nolow.final.s.glm,design2.nolow.final)
+
+genotype22.alltime.coef<-c(paste("genotype",22,sep=""),paste("genotype",22,":time4",sep=""),paste("genotype",22,":time16",sep=""),paste("genotype",22,":time25",sep=""),paste("genotype",22,":time49",sep=""))
+
+dge.nolow.final.glm.lrt22L <- glmLRT(dge.nolow.final.s.glm.fit,coef= genotype22.alltime.coef)
+
+
+DEgene.2.interaction.22L<-topTags(dge.nolow.final.glm.lrt22L,n=10000)$table[topTags(dge.nolow.final.glm.lrt22L,n=10000)$table$FDR<0.001,] 
+dim(DEgene.2.interaction.22L) 
+
+save(dge.nolow.final.glm.lrt22L ,file=("../output_dge.nolow.final.glm.lrt_gt_seperately/dge.nolow.final.glm.lrt22L.Rdata"))
+
+###
+
+samples.nolow.final.s<-samples.nolow.final[samples.nolow.final$genotype== "23"|samples.nolow.final$genotype==24,]
+
+samples.nolow.final.s<-samples.nolow.final.s[samples.nolow.final.s$trt=="L",] # only "sun" treatment
+samples.nolow.final.s$genotype<-as.factor(as.character(samples.nolow.final.s$genotype))
+samples.nolow.final.s$genotype<-relevel(samples.nolow.final.s$genotype,ref="23")
+dge.nolow.final.s<-dge.nolow.final[,colnames(dge.nolow.final) %in% samples.nolow.final.s$file]
+# eliminating low expressed genes in dge.final.s
+dge.nolow.final.s<-dge.nolow.final.s[rowSums(dge.nolow.final.s$counts > 5) >= 3,]
+design2.nolow.final<- model.matrix(~genotype*time+ batch, data=samples.nolow.final.s) 
+# new model to detect genes with gt*time effects 
+colnames(design2.nolow.final) <- gsub("samples.nolow.final.s$","",colnames(design2.nolow.final),fixed=TRUE) 
+# nicer column names
+colnames(design2.nolow.final)
+print(design2.nolow.final)
+dge.nolow.final.s.glm <- estimateGLMCommonDisp(dge.nolow.final.s,design2.nolow.final, verbose=T)
+dge.nolow.final.s.glm <- estimateGLMTrendedDisp(dge.nolow.final.s.glm ,design2.nolow.final, verbose=TRUE)
+dge.nolow.final.s.glm<-estimateGLMTagwiseDisp(dge.nolow.final.s.glm ,design2.nolow.final)
+dge.nolow.final.s.glm.fit <- glmFit(dge.nolow.final.s.glm,design2.nolow.final)
+
+genotype24.alltime.coef<-c(paste("genotype",24,sep=""),paste("genotype",24,":time4",sep=""),paste("genotype",24,":time16",sep=""),paste("genotype",24,":time25",sep=""),paste("genotype",24,":time49",sep=""))
+
+dge.nolow.final.glm.lrt24L <- glmLRT(dge.nolow.final.s.glm.fit,coef= genotype24.alltime.coef)
+
+
+DEgene.2.interaction.24L <-topTags(dge.nolow.final.glm.lrt24L,n=10000)$table[topTags(dge.nolow.final.glm.lrt24L,n=10000)$table$FDR<0.001,] 
+dim(DEgene.2.interaction.24L) 
+
+save(dge.nolow.final.glm.lrt24L ,file=("../output_dge.nolow.final.glm.lrt_gt_seperately/dge.nolow.final.glm.lrt24L.Rdata"))
+
+####
+
+samples.nolow.final.s<-samples.nolow.final[samples.nolow.final$genotype== "23"|samples.nolow.final$genotype==25,]
+
+samples.nolow.final.s<-samples.nolow.final.s[samples.nolow.final.s$trt=="L",] # only "sun" treatment
+samples.nolow.final.s$genotype<-as.factor(as.character(samples.nolow.final.s$genotype))
+samples.nolow.final.s$genotype<-relevel(samples.nolow.final.s$genotype,ref="23")
+dge.nolow.final.s<-dge.nolow.final[,colnames(dge.nolow.final) %in% samples.nolow.final.s$file]
+# eliminating low expressed genes in dge.final.s
+dge.nolow.final.s<-dge.nolow.final.s[rowSums(dge.nolow.final.s$counts > 5) >= 3,]
+design2.nolow.final<- model.matrix(~genotype*time+ batch, data=samples.nolow.final.s) 
+# new model to detect genes with gt*time effects 
+colnames(design2.nolow.final) <- gsub("samples.nolow.final.s$","",colnames(design2.nolow.final),fixed=TRUE) 
+# nicer column names
+colnames(design2.nolow.final)
+print(design2.nolow.final)
+dge.nolow.final.s.glm <- estimateGLMCommonDisp(dge.nolow.final.s,design2.nolow.final, verbose=T)
+dge.nolow.final.s.glm <- estimateGLMTrendedDisp(dge.nolow.final.s.glm ,design2.nolow.final, verbose=TRUE)
+dge.nolow.final.s.glm<-estimateGLMTagwiseDisp(dge.nolow.final.s.glm ,design2.nolow.final)
+dge.nolow.final.s.glm.fit <- glmFit(dge.nolow.final.s.glm,design2.nolow.final)
+
+genotype25.alltime.coef<-c(paste("genotype",25,sep=""),paste("genotype",25,":time4",sep=""),paste("genotype",25,":time16",sep=""),paste("genotype",25,":time25",sep=""),paste("genotype",25,":time49",sep=""))
+
+dge.nolow.final.glm.lrt25L <- glmLRT(dge.nolow.final.s.glm.fit,coef= genotype25.alltime.coef)
+
+
+DEgene.2.interaction.25L <-topTags(dge.nolow.final.glm.lrt25L,n=10000)$table[topTags(dge.nolow.final.glm.lrt25L,n=10000)$table$FDR<0.001,] 
+dim(DEgene.2.interaction.25L) 
+
+save(dge.nolow.final.glm.lrt25L ,file=("../output_dge.nolow.final.glm.lrt_gt_seperately/dge.nolow.final.glm.lrt25L.Rdata"))
+
+####
+
+samples.nolow.final.s<-samples.nolow.final[samples.nolow.final$genotype== "23"|samples.nolow.final$genotype==26,]
+
+samples.nolow.final.s<-samples.nolow.final.s[samples.nolow.final.s$trt=="L",] # only "sun" treatment
+samples.nolow.final.s$genotype<-as.factor(as.character(samples.nolow.final.s$genotype))
+samples.nolow.final.s$genotype<-relevel(samples.nolow.final.s$genotype,ref="23")
+dge.nolow.final.s<-dge.nolow.final[,colnames(dge.nolow.final) %in% samples.nolow.final.s$file]
+# eliminating low expressed genes in dge.final.s
+dge.nolow.final.s<-dge.nolow.final.s[rowSums(dge.nolow.final.s$counts > 5) >= 3,]
+design2.nolow.final<- model.matrix(~genotype*time+ batch, data=samples.nolow.final.s) 
+# new model to detect genes with gt*time effects 
+colnames(design2.nolow.final) <- gsub("samples.nolow.final.s$","",colnames(design2.nolow.final),fixed=TRUE) 
+# nicer column names
+colnames(design2.nolow.final)
+print(design2.nolow.final)
+dge.nolow.final.s.glm <- estimateGLMCommonDisp(dge.nolow.final.s,design2.nolow.final, verbose=T)
+dge.nolow.final.s.glm <- estimateGLMTrendedDisp(dge.nolow.final.s.glm ,design2.nolow.final, verbose=TRUE)
+dge.nolow.final.s.glm<-estimateGLMTagwiseDisp(dge.nolow.final.s.glm ,design2.nolow.final)
+dge.nolow.final.s.glm.fit <- glmFit(dge.nolow.final.s.glm,design2.nolow.final)
+
+genotype26.alltime.coef<-c(paste("genotype",26,sep=""),paste("genotype",26,":time4",sep=""),paste("genotype",26,":time16",sep=""),paste("genotype",26,":time25",sep=""),paste("genotype",26,":time49",sep=""))
+
+dge.nolow.final.glm.lrt26L <- glmLRT(dge.nolow.final.s.glm.fit,coef= genotype26.alltime.coef)
+
+
+DEgene.2.interaction.26L <-topTags(dge.nolow.final.glm.lrt26L,n=10000)$table[topTags(dge.nolow.final.glm.lrt26L,n=10000)$table$FDR<0.001,] 
+dim(DEgene.2.interaction.26L) 
+
+save(dge.nolow.final.glm.lrt26L ,file=("../output_dge.nolow.final.glm.lrt_gt_seperately/dge.nolow.final.glm.lrt26L.Rdata"))
+
+
+####
+samples.nolow.final.s<-samples.nolow.final[samples.nolow.final$genotype== "23"|samples.nolow.final$genotype==27,]
+
+samples.nolow.final.s<-samples.nolow.final.s[samples.nolow.final.s$trt=="L",] # only "sun" treatment
+samples.nolow.final.s$genotype<-as.factor(as.character(samples.nolow.final.s$genotype))
+samples.nolow.final.s$genotype<-relevel(samples.nolow.final.s$genotype,ref="23")
+dge.nolow.final.s<-dge.nolow.final[,colnames(dge.nolow.final) %in% samples.nolow.final.s$file]
+# eliminating low expressed genes in dge.final.s
+dge.nolow.final.s<-dge.nolow.final.s[rowSums(dge.nolow.final.s$counts > 5) >= 3,]
+design2.nolow.final<- model.matrix(~genotype*time+ batch, data=samples.nolow.final.s) 
+# new model to detect genes with gt*time effects 
+colnames(design2.nolow.final) <- gsub("samples.nolow.final.s$","",colnames(design2.nolow.final),fixed=TRUE) 
+# nicer column names
+colnames(design2.nolow.final)
+print(design2.nolow.final)
+dge.nolow.final.s.glm <- estimateGLMCommonDisp(dge.nolow.final.s,design2.nolow.final, verbose=T)
+dge.nolow.final.s.glm <- estimateGLMTrendedDisp(dge.nolow.final.s.glm ,design2.nolow.final, verbose=TRUE)
+dge.nolow.final.s.glm<-estimateGLMTagwiseDisp(dge.nolow.final.s.glm ,design2.nolow.final)
+dge.nolow.final.s.glm.fit <- glmFit(dge.nolow.final.s.glm,design2.nolow.final)
+
+genotype27.alltime.coef<-c(paste("genotype",27,sep=""),paste("genotype",27,":time4",sep=""),paste("genotype",27,":time16",sep=""),paste("genotype",27,":time25",sep=""),paste("genotype",27,":time49",sep=""))
+
+dge.nolow.final.glm.lrt27L <- glmLRT(dge.nolow.final.s.glm.fit,coef= genotype27.alltime.coef)
+
+
+DEgene.2.interaction.27L <-topTags(dge.nolow.final.glm.lrt27L,n=10000)$table[topTags(dge.nolow.final.glm.lrt27L,n=10000)$table$FDR<0.001,] 
+dim(DEgene.2.interaction.27L) 
+
+save(dge.nolow.final.glm.lrt27L ,file=("../output_dge.nolow.final.glm.lrt_gt_seperately/dge.nolow.final.glm.lrt27L.Rdata"))
+
+
+DEGs_number_two_ways_gt_time_shade <- data.frame ("20.L" = as.data.frame(summary(decideTestsDGE(dge.nolow.final.glm.lrt20L, p=0.05)))$Freq,
+                                                  "21.L" = as.data.frame(summary(decideTestsDGE(dge.nolow.final.glm.lrt21L, p=0.05)))$Freq, 
+                                                  "22.L" = as.data.frame(summary(decideTestsDGE(dge.nolow.final.glm.lrt22L, p=0.05)))$Freq,
+                                                  "24.L" = as.data.frame(summary(decideTestsDGE(dge.nolow.final.glm.lrt24L, p=0.05)))$Freq,
+                                                  "25.L" = as.data.frame(summary(decideTestsDGE(dge.nolow.final.glm.lrt25L, p=0.05)))$Freq,
+                                                  "26.L" = as.data.frame(summary(decideTestsDGE(dge.nolow.final.glm.lrt26L, p=0.05)))$Freq, 
+                                                  "27.L" = as.data.frame(summary(decideTestsDGE(dge.nolow.final.glm.lrt27L, p=0.05)))$Freq)
+
+
+DEGs_number_two_ways_gt_time_shade
+rownames(DEGs_number_two_ways_gt_time_shade) <- c("no", "up")
+DEGs_number_two_ways_gt_time_shade <- DEGs_number_two_ways_gt_time_shade["up",]
+
+save(DEGs_number_two_ways_gt_time_shade, file = "../output_dge.nolow.final.glm.lrt_gt_seperately/DEGs_number_two_ways_gt_time_shade.Rdata")
+
+library(reshape2)
+library(ggplot2)
+DEGs_number_two_ways_gt_time_shade.melt <- melt(DEGs_number_two_ways_gt_time_shade)
+DEGs_number_two_ways_gt_time_shade.melt$DE <- rep(("up"), 7)
+colnames(DEGs_number_two_ways_gt_time_shade.melt) <- c("genotype", "number", "DE")
+DEGs_number_two_ways_gt_time_shade.melt
+
+# reorder: up 1st down 2nd 
+#DEGs_number_between_gt_trt_time.melt$DE <- factor(DEGs_number_two_ways_gt_time_sun.melt$DE, levels = "up")
+
+DEGs_number_two_ways_gt_time_shade.melt <- DEGs_number_two_ways_gt_time_shade.melt[order(DEGs_number_two_ways_gt_time_shade.melt$DE),]
+DEGs_number_two_ways_gt_time_shade.melt
+head(DEGs_number_two_ways_gt_time_shade.melt)
+
+DEGs_number_two_ways_gt_time_shade.melt$gt <- gsub("(X)([[:digit:]]+)(\\.)(L)(\\.)(4|16|25|49)", "\\2",DEGs_number_two_ways_gt_time_shade.melt$genotype)
+
+DEGs_number_two_ways_gt_time_shade.melt$time <- gsub("(X)([[:digit:]]+)(\\.)(L)(\\.)(4|16|25|49)", "\\6",DEGs_number_two_ways_gt_time_shade.melt$genotype)
+### making ggplot for DEGs
+library(ggplot2)
+p.DEGs_number_two_ways_gt_time_shade <- ggplot(data = DEGs_number_two_ways_gt_time_shade.melt)
+p.DEGs_number_two_ways_gt_time_shade <- p.DEGs_number_two_ways_gt_time_shade + geom_bar(mapping = aes(fill=DE, x = factor(DE), y = number) , stat= "identity")
+p.DEGs_number_two_ways_gt_time_shade <- p.DEGs_number_two_ways_gt_time_shade + facet_grid(~time) 
+p.DEGs_number_two_ways_gt_time_shade <- p.DEGs_number_two_ways_gt_time_shade + labs(y = "number of differentially expressed genes", x = "")
+p.DEGs_number_two_ways_gt_time_shade
+ggsave(p.DEGs_number_two_ways_gt_time_shade, filename = "../output_dge.nolow.final.glm.lrt_gt_seperately/p.DEGs_number_two_ways_gt_time_shade.png", height = 11, width = 25)
+
+# we want to know what does expression pattern of DGE genes from two way interaction mean?
+
+counts.final <- read.csv("../input/NAMparents.coutns.final.csv", row.names = 1)
+load("../input/NAMparents.samples.nolow.final.Rdata")
+head(counts.final)
+counts.final[is.na(counts.final)]<-0
+library("DESeq2")
+samples.nolow.final.s<-samples.nolow.final[samples.nolow.final$genotype== "23"|samples.nolow.final$genotype==21,]
+
+samples.nolow.final.s<-samples.nolow.final.s[samples.nolow.final.s$trt=="H",] # only "sun" treatment
+samples.nolow.final.s$genotype<-as.factor(as.character(samples.nolow.final.s$genotype))
+samples.nolow.final.s$genotype<-relevel(samples.nolow.final.s$genotype,ref="23")
+counts.final.gt21H <- read.csv("../input/NAMparents.coutns.final.gt21H.csv", row.names = 1)
+dds.final.gt21H <- DESeqDataSetFromMatrix(countData = round(counts.final.gt21H), colData = samples.nolow.final.s, design = ~ genotype*time+ batch)
+
+vst.final.gt21H <- varianceStabilizingTransformation(dds.final.gt21H)
+vstMat.final.gt21H <- assay(vst.final.gt21H)
+head(vstMat.final.gt21H)
+dim(vstMat.final.gt21H)
+# 1) trasform my dataset from wide to long format
+library(reshape2)
+vstMat.final.melt.21H <- melt(vstMat.final.gt21H)
+head(vstMat.final.melt.21H)
+tail(vstMat.final.melt.21H)
+
+#2) get description for each factor of your VST normalized read count
+vstMat.final.melt.21H$genotype<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\2",vstMat.final.melt.21H$Var2))
+vstMat.final.melt.21H$trt<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\3",vstMat.final.melt.21H$Var2))
+vstMat.final.melt.21H$time<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\4",vstMat.final.melt.21H$Var2))
+# 3) get the mean across three biological replicate
+vstMat.final.melt.mean.21H<-as.data.frame(tapply(vstMat.final.melt.21H$value,list(vstMat.final.melt.21H$Var1,vstMat.final.melt.21H$genotype,vstMat.final.melt.21H$trt,vstMat.final.melt.21H$time),mean)) 
+colnames(vstMat.final.melt.mean.21H)
+#modify colnames with gsub(the result of these two code are same) to have input file look like summary.vst file in Kazu data
+gsub("*[\\. ] *", "", colnames(vstMat.final.melt.mean))
+gsub("\\.","",colnames(vstMat.final.melt.mean))
+colnames(vstMat.final.melt.mean.21H)<- gsub("\\.","",colnames(vstMat.final.melt.mean.21H))
+rownames(vstMat.final.melt.mean.21H)
+
+
+#now we want to draw expression pattern for all  DE genes in two way interaction gt:time on sun treatment
+DEgene.2.interaction.21H<-topTags(dge.nolow.final.glm.lrt21H,n=10000)$table[topTags(dge.nolow.final.glm.lrt21H,n=10000)$table$FDR<0.001,] 
+dim(DEgene.2.interaction.21H) 
+order(DEgene.2.interaction.21H$FDR)
+
+row.names(DEgene.2.interaction.21H) #for first 30 genes
+
+#[1] "AT1G25098.1" "AT4G07825.1" "AT2G04378.2" "AT3G43690.1" "AT4G09310.1" "AT2G06950.1" "AT5G49440.1"
+#[8] "AT1G23960.1" "AT5G43800.1" "AT5G28919.1" "AT4G07868.1" "AT2G10410.1" "AT2G11240.1" "AT4G09200.1"
+#[15] "AT5G17890.1" "AT5G46510.1" "AT2G15292.1" "AT1G73490.2" "AT3G30720.1" "AT3G61111.1" "AT1G25175.1"
+#[22] "AT1G24996.1" "AT5G10140.1" "AT4G13495.1" "AT3G47680.1" "AT4G14905.1" "AT4G16990.2" "AT5G45490.1"
+#[29] "AT4G19500.1" "AT4G34881.1"
+
+#draw expression pattern for each genes in all genotypes response to all levels of time in sun condition
+p2 <-expression.pattern.graph3.nam(vstMat.final.melt.mean.21H,target.genes=rownames(DEgene.2.interaction.21H)[1:30],plot.order=rownames(DEgene.2.interaction.21H))
+
+p2
+#got HOW_BACKTRACE environmental variable. due to space limitation, so I shift to whitney
+save(p2,file = "../output_dge.nolow.final.glm.lrt_gt_seperately/p2.Rdata")
+ggsave(p2,file="../output/expression.pattern.graph.DEG_Twoways.21H.png",width=11,height=25)
+
+save(vstMat.final.melt.mean.21H, file = "../output_dge.nolow.final.glm.lrt_gt_seperately/vstMat.final.melt.mean.21H.Rdata")
+head(vstMat.final.melt.mean.21H)
+dim(vstMat.final.melt.mean.21H) 
+
