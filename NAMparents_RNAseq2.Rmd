@@ -1,0 +1,1471 @@
+---
+title: "SAS_timecoure_RNAseq_NAMparents_v2"
+output: 
+  html_document: 
+    keep_md: yes
+---
+created by Kazu Nozue for Hajar (031517)
+# history
+* Clean up and made v2 (033117)
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list=ls()) # clean up workspace
+library(vcfR);library(dplyr);library(reshape2)
+source("function_RNAseq_time_course.R") # I need vlookup function
+#Vlookup in R (https://gist.github.com/jnmaloof/7367450)
+#Version 0.3 November 12, 2013
+#Return senesical results if return column is a factor
+#Version 0.2 November 11, 2013
+#Require first column of table to be numeric if range lookup is being done
+#Change defaults to larger=FALSE
+#Julin Maloof
+vlookup <- function(ref, #the value or values that you want to look for
+                    table, #the table where you want to look for it; will look in first column
+                    column, #the column that you want the return data to come from,
+                    range=FALSE, #if there is not an exact match, return the closest?
+                    larger=FALSE) #if doing a range lookup, should the smaller or larger key be used?)
+{
+  if(!is.numeric(column) & !column %in% colnames(table)) {
+    stop(paste("can't find column",column,"in table"))
+  }
+  if(range) {
+    if(!is.numeric(table[,1])) {
+      stop(paste("The first column of table must be numeric when using range lookup"))
+    }
+    table <- table[order(table[,1]),] 
+    index <- findInterval(ref,table[,1])
+    if(larger) {
+      index <- ifelse(ref %in% table[,1],index,index+1)
+    }
+    output <- table[index,column]
+    output[!index <= dim(table)[1]] <- NA
+    
+  } else {
+    output <- table[match(ref,table[,1]),column]
+    output[!ref %in% table[,1]] <- NA #not needed?
+  }
+  dim(output) <- dim(ref)
+  output
+}
+
+### the end of vlookup()
+```
+# remove libraries with low read counts (copied from Ara_analysis_v2.Rmd)
+## needs to clean up (041117)
+```{r}
+#import data
+test1 <- read.delim ("../input/genes.tsv", header=T, check.names = F) # move genes.tsv into input and rewrite this line
+#this will make the 1st column as my rownames.
+#test1 <- read.table("genes.tsv", header=T, row.names="gene")
+#test1=read.table("genes.tsv",header=T,row.names=1)
+colnames(test1)[1] 
+rownames(test1) <- test1$Gene
+rownames(test1) 
+# subsetting only NAM parent data
+counts=subset(test1, select= grepl("^.[2][0-7].*", names(test1)))
+head(counts)
+colnames(counts)
+dim(counts)
+head(counts)[,1:10]
+#
+# filter based on read count, assign group, normalize, design matrix
+## histogram
+hist(colSums(counts,na.rm=TRUE))
+## lower part
+hist(colSums(counts,na.rm=TRUE)[colSums(counts,na.rm=TRUE) < 5000000]) # Look historgram. Should we use colSums(counts,na.rm=TRUE) < 2000000 below? (Kazu, 041117)
+## too high?
+# hist(colSums(counts,na.rm=TRUE)[colSums(counts,na.rm=TRUE) > 10000000]) #  (Kazu, 041117)
+# counts[,colSums(counts,na.rm=TRUE) > 20000000]
+# counts[,colSums(counts,na.rm=TRUE) > 50000000]
+## general threshold is colSums(counts,na.rm=TRUE) > 1000000
+counts.nolow <- counts[,colSums(counts,na.rm=TRUE) > 1000000]
+#
+#number 1-4 presenting character before equal
+samples <- data.frame(file=colnames(counts),
+                      batch=factor(sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\1",colnames(counts))),
+                      trt=factor(sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\3",colnames(counts))),
+                      time=factor(sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\4",colnames(counts))),
+                      genotype=factor(sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\2",colnames(counts)))) 
+head(samples) 
+
+samples.low<-samples[samples$file %in% names(counts)[colSums(counts,na.rm=TRUE) < 1000000],]
+samples.low
+#        file batch trt time genotype counts
+# 94  D22H49A     D   H   49       22 192234
+# 100  D22L4A     D   L    4       22 563425
+# 106 D23L16A     D   L   16       23 229678
+# 119 D24L49A     D   L   49       24 691324
+# 199 E26L49A     E   L   49       26 151863
+samples.low$counts<-colSums(counts,na.rm=TRUE)[colSums(counts,na.rm=TRUE) < 1000000]
+
+names(counts.nolow)
+#convert NA to zero
+counts.nolow[is.na(counts.nolow)]<-0
+#assign group
+counts.nolow.small <-counts.nolow[rowSums(counts.nolow > 10) >= 3,] # eliinating genes with low expression levels
+samples.nolow.small <- data.frame(file=colnames(counts.nolow.small),
+                      batch=factor(sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\1",colnames(counts.nolow.small))),
+                      trt=factor(sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\3",colnames(counts.nolow.small))),
+                      time=factor(sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\4",colnames(counts.nolow.small))),
+                      genotype=factor(sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\2",colnames(counts.nolow.small)))
+)
+
+#
+write.csv(counts.nolow.small, file="../input/NAMparents.coutns.nolow.small.csv") # use this for next analysis
+save(samples.nolow.small,file="../input/NAMparents.samples.nolow.small.Rdata")
+```
+# RNAseq-MDS plot for quality control (QC)
+## eliminate libraries with strange normalization factors
+```{r}
+counts.nolow.small<-read.csv("../input/NAMparents.coutns.nolow.small.csv",row.names = 1)
+load("../input/NAMparents.samples.nolow.small.Rdata")
+#combine all the experimental factors into one combined factor
+Genotype<-levels(samples.nolow.small$genotype)
+samples.nolow.small$group <- paste(samples.nolow.small$genotype,samples.nolow.small$trt,samples.nolow.small$time,sep=".")
+samples.nolow.small$genotype<-as.character(samples.nolow.small$genotype)
+
+library(edgeR)
+dge.nolow <- DGEList(counts=counts.nolow.small,group=samples.nolow.small$group) 
+head(counts.nolow)
+length(colnames(counts.nolow.small)) # 205 
+dge.nolow<-calcNormFactors(dge.nolow, method = "TMM")
+# look at the normalization factors
+
+temp<-cpm(dge.nolow.1)
+
+nrow(dge.nolow$samples) # 205 
+hist(dge.nolow$samples[,3])
+dege.nolow.lownormfactor.sample<-dge.nolow$sample[dge.nolow$sample[,3] < 0.8,] # these two samples need to be removed, too low sample size... 
+# not because of small library size (there are more libraries with similar size; 041117 Kazu)
+dege.nolow.lownormfactor.sample
+#          group lib.size norm.factors
+# D23H16A 23.H.16  1210313   0.02714546
+# D25H16A 25.H.16  3923312   0.53518489
+plot(log10(dge.nolow$sample[,"lib.size"]),dge.nolow$sample[,"norm.factors"]) # not because of low library size
+
+# remove the two problematic samples from both counts and sample, and renormalize 
+#counts.nolow.1 <- counts.nolow[,(colnames(counts.nolow)!="D23H16A" & colnames(counts.nolow)!="D25H16A")]
+counts.nolow.small.1 <- counts.nolow.small[,!colnames(counts.nolow.small) %in% rownames(dege.nolow.lownormfactor.sample)]
+dim(counts.nolow.small.1) # 203, the two problematic samples were removed 
+
+# now make sample description file with this new dataset 
+samples.nolow.small.1 <- data.frame(file=colnames(counts.nolow.small.1),
+                            batch=factor(sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\1",colnames(counts.nolow.small.1))),
+                            trt=factor(sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\3",colnames(counts.nolow.small.1))),
+                            time=factor(sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\4",colnames(counts.nolow.small.1))),
+                            genotype=factor(sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\2",colnames(counts.nolow.small.1))))
+
+summary(counts.nolow.small.1)
+dim(samples.nolow.small.1) # 203
+# summary (???)
+ftable(samples.nolow.small.1,row.vars=c("genotype","time"),col.vars=c("batch","trt"))
+
+write.csv(counts.nolow.small.1, file="../input/NAMparents.coutns.nolow.small.1.csv") # use this for further analysis
+save(samples.nolow.small.1,file="../input/NAMparents.samples.nolow.small.1.Rdata")
+load("../input/NAMparents.samples.nolow.small.1.Rdata")
+#renormalizing
+samples.nolow.small.1$group <- paste(samples.nolow.small.1$genotype,samples.nolow.small.1$trt,samples.nolow.small.1$time,sep=".")
+samples.nolow.small.1$genotype<-as.character(samples.nolow.small.1$genotype)
+dge.nolow.small.1 <- DGEList(counts=counts.nolow.small.1,group=samples.nolow.small.1$group) 
+dge.nolow.small.1 <-calcNormFactors(dge.nolow.small.1, method = "TMM")
+hist(dge.nolow.small.1$samples[,3]) # great, now all the samples have similar sizes 
+
+```
+## design three way interaction
+```{r}
+#when we want to change the ref from firt genotype to other genotype(chang from 20 to 23)
+samples.nolow.small.1$genotype <- as.factor(samples.nolow.small.1$genotype)
+samples.nolow.small.1$trt <- as.factor(samples.nolow.small.1$trt)
+samples.nolow.small.1$genotype <- relevel(samples.nolow.small.1$genotype,ref="23")
+samples.nolow.small.1$trt <- relevel(samples.nolow.small.1$trt,ref="H")
+
+#design model for multifactor interaction (3 factors)
+design3.nolow.small.1 <- model.matrix(~genotype*trt*time + batch , data=samples.nolow.small.1)
+colnames(design3.nolow.small.1)
+
+#First the overall dispersion
+dge.nolow.small.1 <- estimateGLMCommonDisp(dge.nolow.small.1, design3.nolow.small.1, verbose = T)##Disp = 0.042 , BCV = 0.2052##
+dge.nolow.small.1 <- estimateGLMTrendedDisp(dge.nolow.small.1, design3.nolow.small.1)
+dge.nolow.small.1 <- estimateGLMTagwiseDisp(dge.nolow.small.1, design3.nolow.small.1)
+save(dge.nolow.small.1,file="../output/dge.nolow.small.1.Rdata")
+plotBCV(dge.nolow.small.1)
+dev.copy(png,'BCV.dge.nolow.small.1.png')
+dev.off()
+mds.dge.nolow.small.1 <- plotMDS(dge.nolow.small.1, method = "bcv",labels = dge.nolow.small.1$samples$group)
+dge.nolow.small.1.fit <- glmFit(dge.nolow.small.1, design3.nolow.small.1)
+colnames(dge.nolow.small.1.fit)
+# this function find out genes that have gt:trt:time effect in any genotypes (genotype 23 as reference level)
+dge.nolow.small.1.lrt <- glmLRT(dge.nolow.small.1.fit,coef=c("genotype20:trtL:time4","genotype20:trtL:time16","genotype20:trtL:time25","genotype20:trtL:time49","genotype21:trtL:time4","genotype21:trtL:time16","genotype21:trtL:time25","genotype21:trtL:time49","genotype22:trtL:time4","genotype22:trtL:time16","genotype22:trtL:time25","genotype22:trtL:time49","genotype24:trtL:time4","genotype24:trtL:time16","genotype24:trtL:time25","genotype24:trtL:time49","genotype25:trtL:time4","genotype25:trtL:time16","genotype25:trtL:time25","genotype25:trtL:time49","genotype26:trtL:time4","genotype26:trtL:time16","genotype26:trtL:time25", "genotype26:trtL:time49", "genotype27:trtL:time4", "genotype27:trtL:time16","genotype27:trtL:time25","genotype27:trtL:time49"))
+#I want to know differential expressed genes, I think these genes are better for interpreting as expression pattern
+topTags(dge.nolow.small.1.lrt)
+# get genes significant for three way interaction
+DEgene.3.interaction <- topTags(dge.nolow.small.1.lrt,n = Inf)$table[topTags(dge.nolow.small.1.lrt,n = Inf)$table$FDR<0.05,]
+dim(DEgene.3.interaction)
+colnames(DEgene.3.interaction)
+head(DEgene.3.interaction)
+lrt.20.L.4 <- glmLRT(dge.nolow.small.1.fit,coef=c("genotype20:trtL:time4")) 
+topTags(lrt.20.L.4)
+summary(decideTestsDGE(lrt.20.L.4, p=0.05))
+lrt.20.L.16 <- glmLRT(dge.nolow.small.1.fit,coef=c("genotype20:trtL:time16")) 
+topTags(lrt.20.L.16)
+summary(decideTestsDGE(lrt.20.L.16, p=0.05))
+lrt.20.L.25 <- glmLRT(dge.nolow.small.1.fit,coef=c("genotype20:trtL:time25")) 
+topTags(lrt.20.L.25)
+summary(decideTestsDGE(lrt.20.L.25, p=0.05))
+lrt.20.L.49 <- glmLRT(dge.nolow.small.1.fit,coef=c("genotype20:trtL:time49")) 
+topTags(lrt.20.L.49)
+summary(decideTestsDGE(lrt.20.L.49, p=0.05))
+lrt.21.L.4 <- glmLRT(dge.nolow.small.1.fit,coef=c("genotype21:trtL:time4")) 
+topTags(lrt.21.L.4)
+summary(decideTestsDGE(lrt.21.L.4, p=0.05))
+lrt.21.L.16 <- glmLRT(dge.nolow.small.1.fit,coef=c("genotype21:trtL:time16")) 
+topTags(lrt.21.L.16)
+summary(decideTestsDGE(lrt.21.L.16, p=0.05))
+lrt.21.L.25 <- glmLRT(dge.nolow.small.1.fit,coef=c("genotype21:trtL:time25")) 
+topTags(lrt.21.L.25)
+summary(decideTestsDGE(lrt.21.L.25, p=0.05))
+lrt.21.L.49 <- glmLRT(dge.nolow.small.1.fit,coef=c("genotype21:trtL:time49")) 
+topTags(lrt.21.L.49)
+summary(decideTestsDGE(lrt.21.L.49, p=0.05))
+lrt.22.L.4 <- glmLRT(dge.nolow.small.1.fit,coef=c("genotype22:trtL:time4")) 
+topTags(lrt.22.L.4)
+summary(decideTestsDGE(lrt.22.L.4, p=0.05))
+lrt.22.L.16 <- glmLRT(dge.nolow.small.1.fit,coef=c("genotype22:trtL:time16")) 
+topTags(lrt.22.L.16)
+summary(decideTestsDGE(lrt.22.L.16, p=0.05))
+lrt.22.L.25 <- glmLRT(dge.nolow.small.1.fit,coef=c("genotype22:trtL:time25"))
+topTags(lrt.22.L.25)
+summary(decideTestsDGE(lrt.22.L.25, p=0.05))
+lrt.22.L.49 <- glmLRT(dge.nolow.small.1.fit,coef=c("genotype22:trtL:time49")) 
+topTags(lrt.22.L.49)
+summary(decideTestsDGE(lrt.22.L.49, p=0.05))
+lrt.24.L.4 <- glmLRT(dge.nolow.small.1.fit,coef=c("genotype24:trtL:time4")) 
+topTags(lrt.24.L.4)
+summary(decideTestsDGE(lrt.24.L.4, p=0.05))
+lrt.24.L.16 <- glmLRT(dge.nolow.small.1.fit,coef=c("genotype24:trtL:time16")) 
+topTags(lrt.24.L.16)
+summary(decideTestsDGE(lrt.24.L.16, p=0.05))
+lrt.24.L.25 <- glmLRT(dge.nolow.small.1.fit,coef=c("genotype24:trtL:time25")) 
+topTags(lrt.24.L.25)
+summary(decideTestsDGE(lrt.24.L.25, p=0.05))
+lrt.24.L.49 <- glmLRT(dge.nolow.small.1.fit,coef=c("genotype24:trtL:time49")) 
+topTags(lrt.24.L.49)
+summary(decideTestsDGE(lrt.24.L.49, p=0.05))
+lrt.25.L.4 <- glmLRT(dge.nolow.small.1.fit,coef=c("genotype25:trtL:time4")) 
+topTags(lrt.25.L.4)
+summary(decideTestsDGE(lrt.25.L.4, p=0.05))
+lrt.25.L.16 <- glmLRT(dge.nolow.small.1.fit,coef=c("genotype25:trtL:time16")) 
+topTags(lrt.25.L.16)
+summary(decideTestsDGE(lrt.25.L.16, p=0.05))
+lrt.25.L.25 <- glmLRT(dge.nolow.small.1.fit,coef=c("genotype25:trtL:time25")) 
+topTags(lrt.25.L.25)
+summary(decideTestsDGE(lrt.25.L.25, p=0.05))
+lrt.25.L.49 <- glmLRT(dge.nolow.small.1.fit,coef=c("genotype25:trtL:time49")) 
+topTags(lrt.25.L.49)
+summary(decideTestsDGE(lrt.25.L.49, p=0.05))
+lrt.26.L.4 <- glmLRT(dge.nolow.small.1.fit,coef=c("genotype26:trtL:time4")) 
+topTags(lrt.26.L.4)
+summary(decideTestsDGE(lrt.26.L.4, p=0.05))
+lrt.26.L.16 <- glmLRT(dge.nolow.small.1.fit,coef=c("genotype26:trtL:time16")) 
+topTags(lrt.26.L.16)
+summary(decideTestsDGE(lrt.26.L.16, p=0.05))
+lrt.26.L.25 <- glmLRT(dge.nolow.small.1.fit,coef=c("genotype26:trtL:time25")) 
+topTags(lrt.26.L.25)
+summary(decideTestsDGE(lrt.26.L.25, p=0.05))
+lrt.26.L.49 <- glmLRT(dge.nolow.small.1.fit,coef=c("genotype26:trtL:time49")) 
+topTags(lrt.26.L.49)
+summary(decideTestsDGE(lrt.26.L.49, p=0.05))
+lrt.27.L.4 <- glmLRT(dge.nolow.small.1.fit,coef=c("genotype27:trtL:time4")) 
+topTags(lrt.27.L.4)
+summary(decideTestsDGE(lrt.27.L.4, p=0.05))
+lrt.27.L.16 <- glmLRT(dge.nolow.small.1.fit,coef=c("genotype27:trtL:time16")) 
+topTags(lrt.27.L.16)
+summary(decideTestsDGE(lrt.27.L.16, p=0.05))
+lrt.27.L.25 <- glmLRT(dge.nolow.small.1.fit,coef=c("genotype27:trtL:time25")) 
+topTags(lrt.27.L.25)
+summary(decideTestsDGE(lrt.27.L.25, p=0.05))
+lrt.27.L.49 <- glmLRT(dge.nolow.small.1.fit,coef=c("genotype27:trtL:time49")) 
+topTags(lrt.27.L.49)
+summary(decideTestsDGE(lrt.27.L.49, p=0.05))
+```
+
+```{r}
+DEGs_number_between_gt_trt_time <- data.frame ("20.L.4" = as.data.frame(summary(decideTestsDGE(lrt.20.L.4, p=0.05)))$Freq,
+                                     "20.L.16" = as.data.frame(summary(decideTestsDGE(lrt.20.L.16, p=0.05)))$Freq, "20.L.25" = as.data.frame(summary(decideTestsDGE(lrt.20.L.25, p=0.05)))$Freq,
+                                     "20.L.49" = as.data.frame(summary(decideTestsDGE(lrt.20.L.49, p=0.05)))$Freq,
+                                     "21.L.4" = as.data.frame(summary(decideTestsDGE(lrt.21.L.4, p=0.05)))$Freq,
+                                     "21.L.16" = as.data.frame(summary(decideTestsDGE(lrt.21.L.16, p=0.05)))$Freq,
+                                     "21.L.25" = as.data.frame(summary(decideTestsDGE(lrt.21.L.25, p=0.05)))$Freq,"21.L.49" = as.data.frame(summary(decideTestsDGE(lrt.21.L.49, p=0.05)))$Freq,
+                                     "22.L.4" = as.data.frame(summary(decideTestsDGE(lrt.22.L.4, p=0.05)))$Freq, "22.L.16" = as.data.frame(summary(decideTestsDGE(lrt.22.L.16, p=0.05)))$Freq,
+                                     "22.L.25" = as.data.frame(summary(decideTestsDGE(lrt.22.L.25, p=0.05)))$Freq,"22.L.49" = as.data.frame(summary(decideTestsDGE(lrt.22.L.49, p=0.05)))$Freq,
+                                     "24.L.4" = as.data.frame(summary(decideTestsDGE(lrt.24.L.4, p=0.05)))$Freq, "24.L.16" = as.data.frame(summary(decideTestsDGE(lrt.24.L.16, p=0.05)))$Freq,
+                                     "24.L.25" = as.data.frame(summary(decideTestsDGE(lrt.24.L.25, p=0.05)))$Freq,"24.L.49" = as.data.frame(summary(decideTestsDGE(lrt.24.L.49, p=0.05)))$Freq,
+                                     "25.L.4" = as.data.frame(summary(decideTestsDGE(lrt.25.L.4, p=0.05)))$Freq, "25.L.16" = as.data.frame(summary(decideTestsDGE(lrt.25.L.16, p=0.05)))$Freq,
+                                     "25.L.25" = as.data.frame(summary(decideTestsDGE(lrt.25.L.25, p=0.05)))$Freq,"25.L.49" = as.data.frame(summary(decideTestsDGE(lrt.25.L.49, p=0.05)))$Freq,
+                                     "26.L.4" = as.data.frame(summary(decideTestsDGE(lrt.26.L.4, p=0.05)))$Freq, "26.L.16" = as.data.frame(summary(decideTestsDGE(lrt.26.L.16, p=0.05)))$Freq,
+                                     "26.L.25" = as.data.frame(summary(decideTestsDGE(lrt.26.L.25, p=0.05)))$Freq,"26.L.49" = as.data.frame(summary(decideTestsDGE(lrt.26.L.49, p=0.05)))$Freq,
+                                     "27.L.4" = as.data.frame(summary(decideTestsDGE(lrt.27.L.4, p=0.05)))$Freq, "27.L.16" = as.data.frame(summary(decideTestsDGE(lrt.27.L.16, p=0.05)))$Freq,
+                                     "27.L.25" = as.data.frame(summary(decideTestsDGE(lrt.27.L.25, p=0.05)))$Freq, "27.L.49" = as.data.frame(summary(decideTestsDGE(lrt.27.L.49, p=0.05)))$Freq)
+DEGs_number_between_gt_trt_time
+rownames(DEGs_number_between_gt_trt_time) <- c("down", "no", "up")
+DEGs_number_between_gt_trt_time <- DEGs_number_between_gt_trt_time[c("down", "up"),]
+DEGs_number_between_gt_trt_time
+save(DEGs_number_between_gt_trt_time, file = "../output/DEGs_number_between_gt_trt_time.Rdata")
+```
+#load("../output/DEGs_number_between_gt_trt_time.Rdata")
+```{r}
+#library(reshape2)
+#library(ggplot2)
+DEGs_number_between_gt_trt_time.melt <- melt(DEGs_number_between_gt_trt_time)
+DEGs_number_between_gt_trt_time.melt$DE <- rep(c("down", "up"), 28)
+colnames(DEGs_number_between_gt_trt_time.melt) <- c("genotype", "number", "DE")
+DEGs_number_between_gt_trt_time.melt
+
+# reorder: up 1st down 2nd 
+DEGs_number_between_gt_trt_time.melt$DE <- factor(DEGs_number_between_gt_trt_time.melt$DE, levels = c("up", "down"))
+
+DEGs_number_between_gt_trt_time.melt <- DEGs_number_between_gt_trt_time.melt[order(DEGs_number_between_gt_trt_time.melt$DE),]
+DEGs_number_between_gt_trt_time.melt
+head(DEGs_number_between_gt_trt_time.melt)
+
+DEGs_number_between_gt_trt_time.melt$gt <- gsub("(X)([[:digit:]]+)(\\.)(L)(\\.)(4|16|25|49)", "\\2",DEGs_number_between_gt_trt_time.melt$genotype)
+
+DEGs_number_between_gt_trt_time.melt$time <- gsub("(X)([[:digit:]]+)(\\.)(L)(\\.)(4|16|25|49)", "\\6",DEGs_number_between_gt_trt_time.melt$genotype)
+### making ggplot for DEGs
+library(ggplot2)
+p.DEGs_number_between_gt_trt_time <- ggplot(data = DEGs_number_between_gt_trt_time.melt)
+p.DEGs_number_between_gt_trt_time <- p.DEGs_number_between_gt_trt_time + geom_bar(mapping = aes(fill=DE, x = factor(DE), y = number) , stat= "identity")
+#p.DEGs_number_between_gt_trt_time <- p.DEGs_number_between_gt_trt_time + facet_grid(~time) 
+p.DEGs_number_between_gt_trt_time <- p.DEGs_number_between_gt_trt_time + labs(y = "number of differentially expressed genes", x = "")
+p.DEGs_number_between_gt_trt_time
+
+#check RNA-Seq-MDS plot and find outliner libraries
+x.mds.dge.nolow.small.1 <- as.data.frame(mds.dge.nolow.small.1$x)
+y.mds.dge.nolow.small.1 <- as.data.frame(mds.dge.nolow.small.1$y)
+distance_matrix.mds.dge.nolow.small.1 <- merge(x.mds.dge.nolow.small.1, y.mds.dge.nolow.small.1 , by="row.names")
+distance_matrix.mds.dge.nolow.small.1$group <- gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\2\\3",distance_matrix.mds.dge.nolow.small.1$Row.names)
+distance_matrix.mds.dge.nolow.small.1$genotype <- gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\2",distance_matrix.mds.dge.nolow.small.1$Row.names)
+
+distance_matrix.mds.dge.nolow.small.1$trt <- gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\3",distance_matrix.mds.dge.nolow.small.1$Row.names)
+distance_matrix.mds.dge.nolow.small.1$time <- gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\4",distance_matrix.mds.dge.nolow.small.1$Row.names)
+distance_matrix.mds.dge.nolow.small.1$batch <- gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\1",distance_matrix.mds.dge.nolow.small.1$Row.names)
+colnames(distance_matrix.mds.dge.nolow.small.1) <- c("lib","x","y","group","genotype","trt","time","batch")
+head(distance_matrix.mds.dge.nolow.small.1)
+
+# making color MDS figure
+#p.distance_matrix.mds.dge.nolow.small.1 <- ggplot(data = distance_matrix.mds.dge.nolow.small.1)+ geom_point(aes(x, y, color=factor(genotype), shape=factor(batch)))
+#p.distance_matrix.mds.dge.nolow.small.1 <- ggplot(data = distance_matrix.mds.dge.nolow.small.1)+ geom_label(aes(x, y, color=factor(trt), fill=factor(genotype),label=paste(batch,time,sep="_"),size=0.3,alpha=0.5))
+#p.distance_matrix.mds.dge.nolow.small.1
+#ggsave(p.distance_matrix.mds.dge.nolow.small.1, filename = "../output/p.distance_matrix.mds.dge.nolow.small.1.threeways.png", height = 11, width = 25)
+
+p.distance_matrix.mds.dge.nolow.small.1 <- p.distance_matrix.mds.dge.nolow.small.1 
+p.distance_matrix.mds.dge.nolow.small.1 <- p.distance_matrix.mds.dge.nolow.small.1 + labs(y = "BCV distance 2", x="BCV distance 1")
+p.distance_matrix.mds.dge.nolow.small.1 <- p.distance_matrix.mds.dge.nolow.small.1 + facet_grid(trt~time)
+p.distance_matrix.mds.dge.nolow.small.1
+ggsave(p.distance_matrix.mds.dge.nolow.small.1, filename = "../output/p.distance_matrix.mds.dge.nolow.small.1.threeways.png", height = 11, width = 25)
+```
+# SNP calling for quality control (QC)
+##  Run this chunk once for making Col gene FASTA file (add highly expressed genes)
+```{r}
+# select highly expressed genes
+counts<-read.csv("../input/NAMparents.coutns.csv",row.names = 1) #210 (all original libraries)
+# eliminate six libraries based on above analysis (read count filteration and normal factor)
+eliminated.libraries<-c("E23H49A","D24H16A","E25H25A","E22L16A","C22H25A","C25H49A") 
+counts<-counts[,!colnames(counts) %in% eliminated.libraries] #204
+dim(counts)
+head(counts)
+summary(is.na(counts)) # no NAs
+#is.na(counts)<-0
+#find highly expressed genes
+rowMeans(counts[order(rowMeans(counts,na.rm=TRUE),decreasing=TRUE)[1:10],],na.rm=TRUE)
+# AT5G18610.1 AT1G67090.1 ATCG01130.1 AT1G29930.1 AT1G29920.1 AT3G41768.1 AT5G38410.3 AT5G60390.1 AT1G29910.1 AT2G01010.1 
+#   140232.21    85675.53    64540.52    51992.81    29957.57    29510.78    29342.25    27902.59    27649.14    27255.63 
+# ten highly expressed genes and three hosue keeping genes
+gene_ID <- c("AT5G18610.1", "AT1G67090.1", "ATCG01130.1", "AT1G29930.1","AT1G29920.1", "AT3G41768.1", "AT5G38410.3", "AT5G60390.1", "AT1G29910.1","AT2G01010.1", "AT1G49240.1","AT4G05320.2","AT4G10340.1") 
+# making consensus for each genes seperately
+system("grep -A 30  \>AT1G49240.1 reference/TAIR10_cdna_20110103_representative_gene_model > AT1G49240.1.fa")
+# nano grep AT1G49240.1 # to remove unnecessary lines 
+```
+
+#running this loop for getting vcf file 
+#
+# file=`ls *.sorted.bam | grep "C\|D\|E" | grep "20H\|21H\|22H\|23H\|24H\|25H\|26H\|27H\|20L\|21L\|22L\|23L\|24L\|25L\|26L\|27L"`
+# echo $file
+# 
+# genes=`cat gene_ID`
+# echo $genes
+# 
+# dir="/Network/Servers/avalanche.plb.ucdavis.edu/Volumes/Mammoth/Users/hajaramini/nam_parents_rnaseq/output"
+# echo "output directory is here $dir"
+# 
+# # bin_dir="/Network/Servers/avalanche.plb.ucdavis.edu/Volumes/Mammoth/Users/hajaramini/bin"
+# # echo "bcftool is here: $bin_dir"
+# 
+# for i in $file
+# do
+# echo ${i}
+# for j in $genes
+# do
+# echo ${j}
+# samtools view -h $i $j > ${i}_${j}_temp.sam &&
+#   
+#   samtools view -bSh ${i}_${j}_temp.sam > ${i}_${j}.bam &&
+#   
+#   # samtools tview ${i}_${j}.bam &&
+#   #Like for getting the unique reads (a single read mapping at one best position)
+#   samtools view -bq 1 ${i}_${j}.bam > $dir/${i}_${j}_unique.bam &&
+#   
+#   samtools index $dir/${i}_${j}_unique.bam &&
+#   
+#   samtools mpileup -uvf $dir/${j}.fa $dir/${i}_${j}_unique.bam  | bcftools.1.4 call -m -O z - > $dir/${i}_${j}_foo.vcf.gz &&
+#   bcftools.1.4 index $dir/${i}_${j}_foo.vcf.gz &&
+#   
+#   bcftools.1.4 consensus -f $dir/${j}.fa $dir/${i}_${j}_foo.vcf.gz > $dir/${i}_${j}.fa
+# done
+# done
+# multiple alignment
+```{r}
+## new strategy (use file name)
+consensus.filename<-list.files(path = "~/nam_parents_rnaseq/output" ,pattern="(sorted.bam_AT)([[:print:]]+)(.fa$)")
+for(i in consensus.filename) {
+  print("file name is")
+  print(i)
+  gene_ID2<-sub("([[:print:]]+)(.sorted.bam_)([[:print:]]+)(.fa)","\\3",i)
+  lib.name2<-sub("([[:print:]]+)(.sorted.bam_)([[:print:]]+)","\\1",i)
+  consensus.filename.dir2<-file.path(path="~/nam_parents_rnaseq/output",i)
+ system(paste("sed 's/",gene_ID2,"/",lib.name2,"/ ' ",consensus.filename.dir2, " > ",consensus.filename.dir2,".mod",sep=""))
+}
+# select "mod" files with particular geneID
+mod.file.names<-list.files(path="../output/",pattern=".fa.mod$")
+#mod.file.names
+  #[1]2713 it seems correct
+for(n in 1:3) {
+  mod.file.names.selected<-mod.file.names[sub("([[:print:]]+)(.sorted.bam_)([[:print:]]+)(.fa.mod)","\\3",mod.file.names)==gene_ID[n]] 
+##when I use this command like this the result is (it just for for gene_ID[1]
+#so i try it to run each function for each gene seperately
+  #mod.file.names.selected<-mod.file.names[sub("([[:print:]]+)(.sorted.bam_)([[:print:]]+)(.fa.mod)","\\3",mod.file.names)==gene_ID[2]] it does not work
+  #mod.file.names.selected
+  #character(0)
+  mod.file.names.selected.dir<-file.path(path="~/nam_parents_rnaseq/output",mod.file.names.selected)
+  # merge them
+  # create one file
+ system(paste("cat ",mod.file.names.selected.dir[1]," > ../output/all.library.",gene_ID[n],".fa",sep=""))
+  ## # append rest
+  # loop
+  for(i in mod.file.names.selected.dir[-1]) {
+   system(paste("cat ",i," >> ../output/all.library.",gene_ID[n],".fa",sep=""))
+  }
+}
+system("grep '>' ../output/all.library.AT1G49240.1.fa|wc -l")
+```
+"SNP_MDS for particular genes (13 genes)"
+```{r}
+# vcfR package
+
+```
+##### the scripts above need to be updated #### (040617; Kazu)
+
+# read vcf files and combine them in one data.frame (060617, Kazu)
+```{r}
+system("ls ../output/*_foo.vcf.gz")
+#system("gunzip -k ../output/*_foo.vcf.gz") # -k keeps original .gz files
+vcf.gz<-list.files(path="../output/",pattern="_foo.vcf$") # gunzip -k *_foo.vcf.gz before running this line.
+vcf.lib.name<-gsub("([[:print:]]+)(.sorted.bam_)([[:print:]]+)(_foo)([[:print:]]+)","\\1",vcf.gz) # library name
+vcf.gene.name<-gsub("([[:print:]]+)(.sorted.bam_)([[:print:]]+)(_foo)([[:print:]]+)","\\3",vcf.gz) # gene name
+vcf.genotype<-gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)(A)","\\2",vcf.lib.name)
+vcf.gz.file<-file.path(path="../output",vcf.gz)
+# for one particular gene vcf.gene.name[1]]
+vcf.gene.name.levels<-levels(as.factor(vcf.gene.name))
+# library numbers
+table(vcf.gene.name) # all of them should have 210 libraries
+# 
+table(vcf.lib.name) # all of them should be 13
+problematic.library<-names(table(vcf.lib.name)[table(vcf.lib.name)<13]) # no problematic.library anymore (040617)
+# good.library<-names(table(vcf.lib.name)[table(vcf.lib.name)==13])
+# # which genes are missing?
+# #all.libaray.name<-names(table(vcf.lib.name[vcf.lib.name %in% good.library]))
+# # problematic.library[1] ("C20H16A")
+# temp.gene.name<-vcf.gene.name[vcf.lib.name %in% problematic.library[1]] # twelve. which is missing?
+# gene_ID.all<-levels(as.factor(vcf.gene.name))
+# gene_ID.all[!gene_ID.all %in% temp.gene.name] # "AT5G18610.1" 
+# 
+# # problematic.library[2] ("C22L4A")
+# temp.gene.name<-vcf.gene.name[vcf.lib.name %in% problematic.library[2]] # twelve. which is missing?
+# gene_ID.all<-levels(as.factor(vcf.gene.name))
+# gene_ID.all[!gene_ID.all %in% temp.gene.name] # "AT1G29910.1" "AT2G01010.1" "AT3G41768.1" "AT5G38410.3" "AT5G60390.1" 
+# 
+# # problematic.library[3] ("C23H16A")
+# temp.gene.name<-vcf.gene.name[vcf.lib.name %in% problematic.library[3]] # twelve. which is missing?
+# gene_ID.all<-levels(as.factor(vcf.gene.name))
+# gene_ID.all[!gene_ID.all %in% temp.gene.name] # "AT1G29920.1" "AT1G29930.1" "AT1G67090.1" "AT5G18610.1" "ATCG01130.1"
+# 
+# ## those above are missing vcf files ## Hajar will make thoes vcf files.
+
+# loop for each gene (only genes with all libraries)
+for(n in 1:length(vcf.gene.name.levels)) {
+  print(paste("n is ",n,".",sep=""))
+  vcf.gz.file.s<-vcf.gz.file[vcf.gene.name==vcf.gene.name.levels[n]]
+  if(length(vcf.gz.file.s)==210) { # this should be 210!
+    # reading vcf files into vcf.s.list
+    lapply(vcf.gz.file.s, read.vcfR) -> vcf.s.list
+    # read only FIX data
+    lapply(vcf.s.list,getFIX) -> temp
+    # remove
+    rm(vcf.s.list)
+    names(temp)<-paste(vcf.lib.name[vcf.gene.name==vcf.gene.name.levels[n]])
+    # convert into data frame
+    lapply(temp,as.data.frame) -> temp.df
+    for(i in 1:length(vcf.gz.file.s)) { 
+      temp.df[[i]]$POS<-as.integer(as.character(temp.df[[i]]$POS))
+      }
+  # remove rows with ALT is <NA>
+    for(i in 1:length(vcf.gz.file.s)) {
+      temp.df[[i]]<-temp.df[[i]][!is.na(temp.df[[i]]$ALT),]
+    }
+  } else {next}
+# applyt mutate() to list
+temp.df2<-lapply(temp.df,function(x) mutate(x, CHROM.POS=paste(CHROM, POS,sep="_")))
+
+  Reduce(function(dtf1,dtf2) full_join(dtf1,dtf2,by="CHROM.POS"), temp.df2) -> vcf.temp.all # this creats missing CHROM name. Concatanae CHROM and POS in advance and use that column for merging. And then split CHROM and POS later
+  # get necessary column names
+  vcf.temp.all.s<-vcf.temp.all[,c("CHROM.POS",grep("ALT",colnames(vcf.temp.all),value=T))]
+  print(vcf.temp.all.s)
+  colnames(vcf.temp.all.s)<-c("CHROM.POS",names(temp.df))
+   print(vcf.temp.all.s)
+   # split CHROM.POS column
+   vcf.temp.all.s$CHROM<-sub("(AT)([[:print:]]+)(_)([[:digit:]]+)","\\1\\2",vcf.temp.all.s$CHROM.POS)
+   vcf.temp.all.s$POS<-sub("(AT)([[:print:]]+)(_)([[:digit:]]+)","\\4",vcf.temp.all.s$CHROM.POS)
+  # remove CHROM.POS column
+   vcf.temp.all.s<-vcf.temp.all.s[,-1]
+  # save 
+  save(vcf.temp.all.s,file=paste("../output/vcf.all.KN/",vcf.gene.name[n],".all.s.Rdata",sep=""))
+  rm(vcf.temp.all,vcf.temp.all.s,temp.df)
+}
+# combine them (rbind())
+## how did you call each vcf object?
+vcf.all.file<-list.files(path="../output/vcf.all.KN/",pattern=".all.s.Rdata")
+#vcf.all<-list.files(path="../output",pattern=".all.s.Rdata") # hajar version
+vcf.all.dir<-file.path(path="../output/vcf.all.KN",vcf.all.file)
+  load(vcf.all.dir[1])
+vcf.all<-vcf.temp.all.s
+for(i in vcf.all.dir[-1]) {
+  load(i)
+  vcf.all<-rbind(vcf.all, vcf.temp.all.s) # library numbers are different in genes. subset of library were missing. problem solved by subsetting again and calling vcf for them (Hajar). See finding missing libraries/vcf file above.
+}
+summary(vcf.all)
+dim(vcf.all)
+save(vcf.all,file="../output/vcf.all.Rdata")
+```
+# change ATGC into numbers (see Julin's lab class site) 
+##  I will send vcf.all.Rdata and vcf.all.KN folder by email. (040617)
+```{r}
+#library(reshape2)
+load("../output/vcf.all.Rdata") # vcf.all colunm names are different from previous one (040617; Kazu)
+#eliminate vcf.all 
+eliminated.libraries<-c("D22H49A","D22L4A","D23L16A","D24L49A","E26L49A","D25H16A","D23H16A")
+vcf.all<-vcf.all[,!colnames(vcf.all) %in% eliminated.libraries]
+dim(vcf.all) #205 out of 212
+vcf.all.ATG<-vcf.all
+table(vcf.all.ATG[,1]) # no NA
+SNP.table<-table(melt(vcf.all,id.var=c("CHROM","POS"))$value)
+
+letter.num.conversion<-data.frame(names(SNP.table),num=1:length(SNP.table))
+letter.num.conversion
+#vlookup(vcf.all[,3:212],letter.num.conversion,2) # works? No. Works only for numeric
+#vcf.all.old<-vcf.all
+str(vcf.all) # factor
+vcf.all[,1:205]<-lapply(vcf.all[,1:205],as.character)
+str(vcf.all) # character
+for(n in 1:(dim(vcf.all)[2]-2)) { # do not work on "CHROM" and "POS" columns
+  for(i in 1:dim(vcf.all)[1]) {
+    if(is.na(vcf.all[i,n])==T) {next} 
+    else {
+    print(paste("i is",i,"."))
+    print(paste("n is",n,"."))
+      vcf.all[i,n]<-as.character(letter.num.conversion[letter.num.conversion==as.character(vcf.all[i,n]),2])
+    }
+  }
+}
+# convert NA into zero
+vcf.all[,1:205][is.na(vcf.all[,1:205])]<-"0"
+# convert character into numeric
+vcf.all[,1:205]<-lapply(vcf.all[,1:205],as.numeric)
+```
+# calculate and MDS plot
+```{r}
+#calculate the Euclidian distance between each sample(for all gt)
+dim(vcf.all) # 205
+colnames(vcf.all)
+genDist <- as.matrix(dist(t(vcf.all[,1:203])))
+rownames(genDist) 
+# Warning message:
+# In dist(vcf.all) : NAs introduced by coercion
+#perform the multi-dimensional scaling
+geno.mds <- as.data.frame(cmdscale(genDist)) 
+head(geno.mds)
+geno.mds$genotype<-sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)(A)","\\2",rownames(geno.mds))
+geno.mds$time<-sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)(A)","\\4",rownames(geno.mds))
+geno.mds$library<-rownames(geno.mds)
+library(ggplot2)
+p<-ggplot(geno.mds,aes(x=V1,y=V2,color=genotype,label=library,alpha=0.5,angle=45)) + geom_text(size=3)
+p <- p + facet_grid(~trt)
+p
+ggsave("NAMparents.geno.mds.forthreegenotypes.png",width=11,height=8,path="../output/")
+
+#calculate the Euclidian distance between each samples(just for gt # 22,23,24)
+vcf.all.1=subset(vcf.all, select= grepl("^.[2][2-4].*", names(vcf.all)))
+dim(vcf.all.1) # 85
+colnames(vcf.all.1)
+genDist <- as.matrix(dist(t(vcf.all.1[,1:85])))
+rownames(genDist) 
+# Warning message:
+# In dist(vcf.all) : NAs introduced by coercion
+#perform the multi-dimensional scaling
+geno.mds <- as.data.frame(cmdscale(genDist)) 
+head(geno.mds)
+geno.mds$genotype<-sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)(A)","\\2",rownames(geno.mds))
+geno.mds$time<-sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)(A)","\\4",rownames(geno.mds))
+geno.mds$library<-rownames(geno.mds)
+library(ggplot2)
+p<-ggplot(geno.mds,aes(x=V1,y=V2,color=genotype,label=library,alpha=0.5,angle=45)) + geom_text(size=3)
+p <- p + facet_grid(~time)
+p
+ggsave("NAMparents.geno.mds.forall.png",width=11,height=8,path="../output/")
+
+# look SNP info among the same genotype (for all genotype not just 22,23,24)
+vcf.all.ATG.t<-as.data.frame(t(vcf.all.ATG))
+vcf.all.ATG.t$genotype<-sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)(A)","\\2",rownames(vcf.all.ATG.t))
+vcf.all.ATG.t$time<-sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)(A)","\\4",rownames(vcf.all.ATG.t))
+vcf.all.ATG.t$treatment<-sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)(A)","\\3",rownames(vcf.all.ATG.t))
+vcf.all.ATG.t$set<-sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)(A)","\\1",rownames(vcf.all.ATG.t))
+
+# subset genotype "20" (I have to change this function)
+vcf.all.ATG.t.gt20<-vcf.all.ATG.t[vcf.all.ATG.t$genotype=="20",]
+# remove SNP is <NA> ### under construction ###
+vcf.all.ATG.t.gt20
+colnames(vcf.all.ATG.t.gt20)
+summary(vcf.all.ATG.t.gt20)
+vcf.all.ATG.t.gt20[,1:154]<-lapply(vcf.all.ATG.t.gt20[,1:154],as.character)
+vcf.all.ATG.t.gt20[,1:154][is.na(vcf.all.ATG.t.gt20[,1:154])]<-"0"
+
+#apply(vcf.all.ATG.t.gt20,1, grep("0", .)) # does not work.
+grep.zero<-vector()
+for(i in 1:154) {
+grep.zero[i]<-length(grep("0", vcf.all.ATG.t.gt20[,i]))
+}
+# remove no SNPs among genotype 20
+summary(vcf.all.ATG.t.gt20)
+vcf.all.ATG.t.gt20.s<-vcf.all.ATG.t.gt20[,1:154][!grep.zero==30]
+# adding "CHROM" and "POS"
+vcf.all.ATG.t.gt20.ss<-rbind(vcf.all.ATG.t[,1:154][c("CHROM","POS"),!grep.zero==30], vcf.all.ATG.t.gt20.s)
+vcf.all.ATG.t.gt20.ss
+write.csv(vcf.all.ATG.t.gt20.ss,file="../output/vcf.all.ATG.t.gt20.ss.csv")
+
+# subset genotype "21" 
+vcf.all.ATG.t.gt21<-vcf.all.ATG.t[vcf.all.ATG.t$genotype=="21",]
+# remove SNP is <NA> ### under construction ###
+vcf.all.ATG.t.gt21
+colnames(vcf.all.ATG.t.gt21)
+summary(vcf.all.ATG.t.gt21)
+vcf.all.ATG.t.gt21[,1:154]<-lapply(vcf.all.ATG.t.gt21[,1:154],as.character)
+vcf.all.ATG.t.gt21[,1:154][is.na(vcf.all.ATG.t.gt21[,1:154])]<-"0"
+
+grep.zero<-vector()
+for(i in 1:154) {
+grep.zero[i]<-length(grep("0", vcf.all.ATG.t.gt21[,i]))
+}
+# remove no SNPs among genotype 21
+summary(vcf.all.ATG.t.gt21)
+vcf.all.ATG.t.gt21.s<-vcf.all.ATG.t.gt21[,1:154][!grep.zero==30]
+# adding "CHROM" and "POS"
+vcf.all.ATG.t.gt21.ss<-rbind(vcf.all.ATG.t[,1:154][c("CHROM","POS"),!grep.zero==30], vcf.all.ATG.t.gt21.s)
+vcf.all.ATG.t.gt21.ss
+write.csv(vcf.all.ATG.t.gt21.ss,file="../output/vcf.all.ATG.t.gt21.ss.csv")
+# subset genotype "22" 
+vcf.all.ATG.t.gt22<-vcf.all.ATG.t[vcf.all.ATG.t$genotype=="22",]
+# remove SNP is <NA> ### under construction ###
+vcf.all.ATG.t.gt22
+colnames(vcf.all.ATG.t.gt22)
+summary(vcf.all.ATG.t.gt22)
+vcf.all.ATG.t.gt22[,1:154]<-lapply(vcf.all.ATG.t.gt22[,1:154],as.character)
+vcf.all.ATG.t.gt22[,1:154][is.na(vcf.all.ATG.t.gt22[,1:154])]<-"0"
+
+grep.zero<-vector()
+for(i in 1:154) {
+grep.zero[i]<-length(grep("0", vcf.all.ATG.t.gt22[,i]))
+}
+# remove no SNPs among genotype 22
+summary(vcf.all.ATG.t.gt22)
+vcf.all.ATG.t.gt22.s<-vcf.all.ATG.t.gt22[,1:154][!grep.zero==30]
+# adding "CHROM" and "POS"
+vcf.all.ATG.t.gt22.ss<-rbind(vcf.all.ATG.t[,1:154][c("CHROM","POS"),!grep.zero==30], vcf.all.ATG.t.gt22.s)
+vcf.all.ATG.t.gt22.ss
+write.csv(vcf.all.ATG.t.gt22.ss,file="../output/vcf.all.ATG.t.gt22.ss.csv")
+
+# subset genotype "23" 
+vcf.all.ATG.t.gt23<-vcf.all.ATG.t[vcf.all.ATG.t$genotype=="23",]
+# remove SNP is <NA> ### under construction ###
+vcf.all.ATG.t.gt23
+colnames(vcf.all.ATG.t.gt23)
+summary(vcf.all.ATG.t.gt23)
+vcf.all.ATG.t.gt23[,1:154]<-lapply(vcf.all.ATG.t.gt23[,1:154],as.character)
+vcf.all.ATG.t.gt23[,1:154][is.na(vcf.all.ATG.t.gt23[,1:154])]<-"0"
+
+grep.zero<-vector()
+for(i in 1:154) {
+grep.zero[i]<-length(grep("0", vcf.all.ATG.t.gt23[,i]))
+}
+# remove no SNPs among genotype 23
+summary(vcf.all.ATG.t.gt23)
+vcf.all.ATG.t.gt23.s<-vcf.all.ATG.t.gt23[,1:154][!grep.zero==30]
+# adding "CHROM" and "POS"
+vcf.all.ATG.t.gt23.ss<-rbind(vcf.all.ATG.t[,1:154][c("CHROM","POS"),!grep.zero==30], vcf.all.ATG.t.gt23.s)
+vcf.all.ATG.t.gt23.ss
+write.csv(vcf.all.ATG.t.gt23.ss,file="../output/vcf.all.ATG.t.gt23.ss.csv")
+
+
+# subset genotype "24"
+vcf.all.ATG.t.gt24<-vcf.all.ATG.t[vcf.all.ATG.t$genotype=="24",]
+# remove SNP is <NA> ### under construction ###
+vcf.all.ATG.t.gt24
+colnames(vcf.all.ATG.t.gt24)
+summary(vcf.all.ATG.t.gt24)
+vcf.all.ATG.t.gt24[,1:154]<-lapply(vcf.all.ATG.t.gt24[,1:154],as.character)
+vcf.all.ATG.t.gt24[,1:154][is.na(vcf.all.ATG.t.gt24[,1:154])]<-"0"
+
+grep.zero<-vector()
+for(i in 1:154) {
+grep.zero[i]<-length(grep("0", vcf.all.ATG.t.gt24[,i]))
+}
+# remove no SNPs among genotype 24
+summary(vcf.all.ATG.t.gt24)
+vcf.all.ATG.t.gt24.s<-vcf.all.ATG.t.gt24[,1:154][!grep.zero==30]
+# adding "CHROM" and "POS"
+vcf.all.ATG.t.gt24.ss<-rbind(vcf.all.ATG.t[,1:154][c("CHROM","POS"),!grep.zero==30], vcf.all.ATG.t.gt24.s)
+vcf.all.ATG.t.gt24.ss
+write.csv(vcf.all.ATG.t.gt24.ss,file="../output/vcf.all.ATG.t.gt24.ss.csv")
+
+# subset genotype "25"
+vcf.all.ATG.t.gt25<-vcf.all.ATG.t[vcf.all.ATG.t$genotype=="25",]
+# remove SNP is <NA> 
+vcf.all.ATG.t.gt25
+colnames(vcf.all.ATG.t.gt25)
+summary(vcf.all.ATG.t.gt25)
+vcf.all.ATG.t.gt25[,1:154]<-lapply(vcf.all.ATG.t.gt25[,1:154],as.character)
+vcf.all.ATG.t.gt25[,1:154][is.na(vcf.all.ATG.t.gt25[,1:154])]<-"0"
+
+grep.zero<-vector()
+for(i in 1:154) {
+grep.zero[i]<-length(grep("0", vcf.all.ATG.t.gt25[,i]))
+}
+# remove no SNPs among genotype 25
+summary(vcf.all.ATG.t.gt25)
+vcf.all.ATG.t.gt25.s<-vcf.all.ATG.t.gt25[,1:154][!grep.zero==30]
+# adding "CHROM" and "POS"
+vcf.all.ATG.t.gt25.ss<-rbind(vcf.all.ATG.t[,1:154][c("CHROM","POS"),!grep.zero==30], vcf.all.ATG.t.gt25.s)
+vcf.all.ATG.t.gt25.ss
+write.csv(vcf.all.ATG.t.gt25.ss,file="../output/vcf.all.ATG.t.gt25.ss.csv")
+
+# subset genotype "26"
+vcf.all.ATG.t.gt26<-vcf.all.ATG.t[vcf.all.ATG.t$genotype=="26",]
+# remove SNP is <NA> 
+vcf.all.ATG.t.gt26
+colnames(vcf.all.ATG.t.gt26)
+summary(vcf.all.ATG.t.gt26)
+vcf.all.ATG.t.gt26[,1:154]<-lapply(vcf.all.ATG.t.gt26[,1:154],as.character)
+vcf.all.ATG.t.gt26[,1:154][is.na(vcf.all.ATG.t.gt26[,1:154])]<-"0"
+
+grep.zero<-vector()
+for(i in 1:154) {
+grep.zero[i]<-length(grep("0", vcf.all.ATG.t.gt26[,i]))
+}
+# remove no SNPs among genotype 26
+summary(vcf.all.ATG.t.gt26)
+vcf.all.ATG.t.gt26.s<-vcf.all.ATG.t.gt26[,1:154][!grep.zero==30]
+# adding "CHROM" and "POS"
+vcf.all.ATG.t.gt26.ss<-rbind(vcf.all.ATG.t[,1:154][c("CHROM","POS"),!grep.zero==30], vcf.all.ATG.t.gt26.s)
+vcf.all.ATG.t.gt26.ss
+write.csv(vcf.all.ATG.t.gt26.ss,file="../output/vcf.all.ATG.t.gt26.ss.csv")
+
+# subset genotype "27"
+vcf.all.ATG.t.gt27<-vcf.all.ATG.t[vcf.all.ATG.t$genotype=="27",]
+# remove SNP is <NA> 
+vcf.all.ATG.t.gt27
+colnames(vcf.all.ATG.t.gt27)
+summary(vcf.all.ATG.t.gt27)
+vcf.all.ATG.t.gt27[,1:154]<-lapply(vcf.all.ATG.t.gt27[,1:154],as.character)
+vcf.all.ATG.t.gt27[,1:154][is.na(vcf.all.ATG.t.gt27[,1:154])]<-"0"
+
+grep.zero<-vector()
+for(i in 1:154) {
+grep.zero[i]<-length(grep("0", vcf.all.ATG.t.gt27[,i]))
+}
+# remove no SNPs among genotype 27
+summary(vcf.all.ATG.t.gt27)
+vcf.all.ATG.t.gt27.s<-vcf.all.ATG.t.gt27[,1:154][!grep.zero==30]
+# adding "CHROM" and "POS"
+vcf.all.ATG.t.gt27.ss<-rbind(vcf.all.ATG.t[,1:154][c("CHROM","POS"),!grep.zero==30], vcf.all.ATG.t.gt27.s)
+vcf.all.ATG.t.gt27.ss
+write.csv(vcf.all.ATG.t.gt27.ss,file="../output/vcf.all.ATG.t.gt27.ss.csv")
+```
+# conclusion (swap? elimination of libraries? based on RNAseq-MDS and SNP-MDS etc.
+## I eliminated six libraries for checking with ftable for num of rep
+##based on rep I think it is OK to discard these libraries
+```{r}
+# final libraries to use (?????)
+
+eliminated.libraries<-c("E22L16A","C22H25A","E23H49A","D24H16A","E25H25A","C20H1A") 
+counts.final<-counts.nolow.small.1[,!colnames(counts.nolow.small.1) %in% eliminated.libraries]
+dim(counts.final) #197 out of 203
+dim(samples.nolow.small.1) # 203
+samples.nolow.final <- data.frame(file=colnames(counts.final),
+                            batch=factor(sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\1",colnames(counts.final))),
+                            trt=factor(sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\3",colnames(counts.final))),
+                            time=factor(sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\4",colnames(counts.final))),
+                            genotype=factor(sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\2",colnames(counts.final))))
+dim(samples.nolow.final) # 197 5
+colnames(samples.nolow.final)
+ftable(samples.nolow.final,row.vars=c("genotype","time"),col.vars=c("batch","trt"))
+# save
+write.csv(counts.final, file="../input/NAMparents.coutns.final.csv") # use this for further analysis
+save(samples.nolow.final,file="../input/NAMparents.samples.nolow.final.Rdata")
+```
+#start with final version of data (after removing six outlier libraries)
+head(samples.nolow.final)
+samples.nolow.final$group <- paste(samples.nolow.final$genotype,samples.nolow.final$trt,samples.nolow.final$time,sep=".")
+samples.nolow.final$genotype<-as.character(samples.nolow.final$genotype)
+dge.nolow.final <- DGEList(counts=counts.final,group=samples.nolow.final$group) 
+dge.nolow.final <-calcNormFactors(dge.nolow.final, method = "TMM")
+hist(dge.nolow.final$samples[,3])
+
+```
+
+#differentially expressed gene analysis
+## design model for three way interaction
+```{r}
+#when we want to change the ref from firt genotype to other genotype(chang from 20 to 23)
+samples.nolow.final$genotype <- as.factor(samples.nolow.final$genotype)
+samples.nolow.final$trt <- as.factor(samples.nolow.final$trt)
+samples.nolow.final$genotype <- relevel(samples.nolow.final$genotype,ref="23")
+samples.nolow.final$trt <- relevel(samples.nolow.final$trt,ref="H")
+save(samples.nolow.final,file="../input/NAMparents.samples.nolow.final.Rdata")
+#design model for multifactor interaction (3 factors)
+design3.nolow.final <- model.matrix(~genotype*trt*time + batch , data=samples.nolow.final)
+colnames(design3.nolow.final)
+
+#First the overall dispersion
+dge.nolow.final <- estimateGLMCommonDisp(dge.nolow.final,design3.nolow.final, verbose = T)##Disp = 0.034 , BCV = 0.186##
+dge.nolow.final <- estimateGLMTrendedDisp(dge.nolow.final,design3.nolow.final)
+dge.nolow.final <- estimateGLMTagwiseDisp(dge.nolow.final,design3.nolow.final)
+save(dge.nolow.final,file="../output/dge.nolow.final.Rdata")
+plotBCV(dge.nolow.final)
+dev.copy(png,'BCV.dge.nolow.final.png')
+dev.off()
+mds.dge.nolow.final <- plotMDS(dge.nolow.final, method = "bcv",labels = dge.nolow.final$samples$group)
+dge.nolow.final.fit <- glmFit(dge.nolow.final, design3.nolow.final)
+colnames(dge.nolow.final.fit)
+save(dge.nolow.final.fit,file="../output/dge.nolow.final.fit.Rdata")
+# this function find out genes that have gt:trt:time effect in any genotypes (genotype 23 as reference level)
+dge.nolow.final.lrt <- glmLRT(dge.nolow.final.fit,coef=c("genotype20:trtL:time4","genotype20:trtL:time16","genotype20:trtL:time25","genotype20:trtL:time49","genotype21:trtL:time4","genotype21:trtL:time16","genotype21:trtL:time25","genotype21:trtL:time49","genotype22:trtL:time4","genotype22:trtL:time16","genotype22:trtL:time25","genotype22:trtL:time49","genotype24:trtL:time4","genotype24:trtL:time16","genotype24:trtL:time25","genotype24:trtL:time49","genotype25:trtL:time4","genotype25:trtL:time16","genotype25:trtL:time25","genotype25:trtL:time49","genotype26:trtL:time4","genotype26:trtL:time16","genotype26:trtL:time25", "genotype26:trtL:time49", "genotype27:trtL:time4", "genotype27:trtL:time16","genotype27:trtL:time25","genotype27:trtL:time49"))
+#I want to know differential expressed genes, I think these genes are better for interpreting as expression pattern
+topTags(dge.nolow.final.lrt)
+# get genes significant for three way interaction
+DEgene.3.interaction <- topTags(dge.nolow.final.lrt,n = Inf)$table[topTags(dge.nolow.final.lrt,n = Inf)$table$FDR<0.05,]
+dim(DEgene.3.interaction) # 27 32
+colnames(DEgene.3.interaction)
+head(DEgene.3.interaction)
+rownames(DEgene.3.interaction)
+
+lrt.20.L.4 <- glmLRT(dge.nolow.final.fit,coef=c("genotype20:trtL:time4")) 
+topTags(lrt.20.L.4)
+summary(decideTestsDGE(lrt.20.L.4, p=0.05))
+lrt.20.L.16 <- glmLRT(dge.nolow.final.fit,coef=c("genotype20:trtL:time16")) 
+topTags(lrt.20.L.16)
+summary(decideTestsDGE(lrt.20.L.16, p=0.05))
+lrt.20.L.25 <- glmLRT(dge.nolow.final.fit,coef=c("genotype20:trtL:time25")) 
+topTags(lrt.20.L.25)
+summary(decideTestsDGE(lrt.20.L.25, p=0.05))
+lrt.20.L.49 <- glmLRT(dge.nolow.final.fit,coef=c("genotype20:trtL:time49")) 
+topTags(lrt.20.L.49)
+summary(decideTestsDGE(lrt.20.L.49, p=0.05))
+lrt.21.L.4 <- glmLRT(dge.nolow.final.fit,coef=c("genotype21:trtL:time4")) 
+topTags(lrt.21.L.4)
+summary(decideTestsDGE(lrt.21.L.4, p=0.05))
+lrt.21.L.16 <- glmLRT(dge.nolow.final.fit,coef=c("genotype21:trtL:time16")) 
+topTags(lrt.21.L.16)
+summary(decideTestsDGE(lrt.21.L.16, p=0.05))
+lrt.21.L.25 <- glmLRT(dge.nolow.final.fit,coef=c("genotype21:trtL:time25")) 
+topTags(lrt.21.L.25)
+summary(decideTestsDGE(lrt.21.L.25, p=0.05))
+lrt.21.L.49 <- glmLRT(dge.nolow.final.fit,coef=c("genotype21:trtL:time49")) 
+topTags(lrt.21.L.49)
+summary(decideTestsDGE(lrt.21.L.49, p=0.05))
+lrt.22.L.4 <- glmLRT(dge.nolow.final.fit,coef=c("genotype22:trtL:time4")) 
+topTags(lrt.22.L.4)
+summary(decideTestsDGE(lrt.22.L.4, p=0.05))
+lrt.22.L.16 <- glmLRT(dge.nolow.final.fit,coef=c("genotype22:trtL:time16")) 
+topTags(lrt.22.L.16)
+summary(decideTestsDGE(lrt.22.L.16, p=0.05))
+lrt.22.L.25 <- glmLRT(dge.nolow.final.fit,coef=c("genotype22:trtL:time25"))
+topTags(lrt.22.L.25)
+summary(decideTestsDGE(lrt.22.L.25, p=0.05))
+lrt.22.L.49 <- glmLRT(dge.nolow.final.fit,coef=c("genotype22:trtL:time49")) 
+topTags(lrt.22.L.49)
+summary(decideTestsDGE(lrt.22.L.49, p=0.05))
+lrt.24.L.4 <- glmLRT(dge.nolow.final.fit,coef=c("genotype24:trtL:time4")) 
+topTags(lrt.24.L.4)
+summary(decideTestsDGE(lrt.24.L.4, p=0.05))
+lrt.24.L.16 <- glmLRT(dge.nolow.final.fit,coef=c("genotype24:trtL:time16")) 
+topTags(lrt.24.L.16)
+summary(decideTestsDGE(lrt.24.L.16, p=0.05))
+lrt.24.L.25 <- glmLRT(dge.nolow.final.fit,coef=c("genotype24:trtL:time25")) 
+topTags(lrt.24.L.25)
+summary(decideTestsDGE(lrt.24.L.25, p=0.05))
+lrt.24.L.49 <- glmLRT(dge.nolow.final.fit,coef=c("genotype24:trtL:time49")) 
+topTags(lrt.24.L.49)
+summary(decideTestsDGE(lrt.24.L.49, p=0.05))
+lrt.25.L.4 <- glmLRT(dge.nolow.final.fit,coef=c("genotype25:trtL:time4")) 
+topTags(lrt.25.L.4)
+summary(decideTestsDGE(lrt.25.L.4, p=0.05))
+lrt.25.L.16 <- glmLRT(dge.nolow.final.fit,coef=c("genotype25:trtL:time16")) 
+topTags(lrt.25.L.16)
+summary(decideTestsDGE(lrt.25.L.16, p=0.05))
+lrt.25.L.25 <- glmLRT(dge.nolow.final.fit,coef=c("genotype25:trtL:time25")) 
+topTags(lrt.25.L.25)
+summary(decideTestsDGE(lrt.25.L.25, p=0.05))
+lrt.25.L.49 <- glmLRT(dge.nolow.final.fit,coef=c("genotype25:trtL:time49")) 
+topTags(lrt.25.L.49)
+summary(decideTestsDGE(lrt.25.L.49, p=0.05))
+lrt.26.L.4 <- glmLRT(dge.nolow.final.fit,coef=c("genotype26:trtL:time4")) 
+topTags(lrt.26.L.4)
+summary(decideTestsDGE(lrt.26.L.4, p=0.05))
+lrt.26.L.16 <- glmLRT(dge.nolow.final.fit,coef=c("genotype26:trtL:time16")) 
+topTags(lrt.26.L.16)
+summary(decideTestsDGE(lrt.26.L.16, p=0.05))
+lrt.26.L.25 <- glmLRT(dge.nolow.final.fit,coef=c("genotype26:trtL:time25")) 
+topTags(lrt.26.L.25)
+summary(decideTestsDGE(lrt.26.L.25, p=0.05))
+lrt.26.L.49 <- glmLRT(dge.nolow.final.fit,coef=c("genotype26:trtL:time49")) 
+topTags(lrt.26.L.49)
+summary(decideTestsDGE(lrt.26.L.49, p=0.05))
+lrt.27.L.4 <- glmLRT(dge.nolow.final.fit,coef=c("genotype27:trtL:time4")) 
+topTags(lrt.27.L.4)
+summary(decideTestsDGE(lrt.27.L.4, p=0.05))
+lrt.27.L.16 <- glmLRT(dge.nolow.final.fit,coef=c("genotype27:trtL:time16")) 
+topTags(lrt.27.L.16)
+summary(decideTestsDGE(lrt.27.L.16, p=0.05))
+lrt.27.L.25 <- glmLRT(dge.nolow.final.fit,coef=c("genotype27:trtL:time25")) 
+topTags(lrt.27.L.25)
+summary(decideTestsDGE(lrt.27.L.25, p=0.05))
+lrt.27.L.49 <- glmLRT(dge.nolow.final.fit,coef=c("genotype27:trtL:time49")) 
+topTags(lrt.27.L.49)
+summary(decideTestsDGE(lrt.27.L.49, p=0.05))
+```
+
+```{r}
+DEGsfinal_number_between_gt_trt_time <- data.frame ("20.L.4" = as.data.frame(summary(decideTestsDGE(lrt.20.L.4, p=0.05)))$Freq,
+                                     "20.L.16" = as.data.frame(summary(decideTestsDGE(lrt.20.L.16, p=0.05)))$Freq, "20.L.25" = as.data.frame(summary(decideTestsDGE(lrt.20.L.25, p=0.05)))$Freq,
+                                     "20.L.49" = as.data.frame(summary(decideTestsDGE(lrt.20.L.49, p=0.05)))$Freq,
+                                     "21.L.4" = as.data.frame(summary(decideTestsDGE(lrt.21.L.4, p=0.05)))$Freq,
+                                     "21.L.16" = as.data.frame(summary(decideTestsDGE(lrt.21.L.16, p=0.05)))$Freq,
+                                     "21.L.25" = as.data.frame(summary(decideTestsDGE(lrt.21.L.25, p=0.05)))$Freq,"21.L.49" = as.data.frame(summary(decideTestsDGE(lrt.21.L.49, p=0.05)))$Freq,
+                                     "22.L.4" = as.data.frame(summary(decideTestsDGE(lrt.22.L.4, p=0.05)))$Freq, "22.L.16" = as.data.frame(summary(decideTestsDGE(lrt.22.L.16, p=0.05)))$Freq,
+                                     "22.L.25" = as.data.frame(summary(decideTestsDGE(lrt.22.L.25, p=0.05)))$Freq,"22.L.49" = as.data.frame(summary(decideTestsDGE(lrt.22.L.49, p=0.05)))$Freq,
+                                     "24.L.4" = as.data.frame(summary(decideTestsDGE(lrt.24.L.4, p=0.05)))$Freq, "24.L.16" = as.data.frame(summary(decideTestsDGE(lrt.24.L.16, p=0.05)))$Freq,
+                                     "24.L.25" = as.data.frame(summary(decideTestsDGE(lrt.24.L.25, p=0.05)))$Freq,"24.L.49" = as.data.frame(summary(decideTestsDGE(lrt.24.L.49, p=0.05)))$Freq,
+                                     "25.L.4" = as.data.frame(summary(decideTestsDGE(lrt.25.L.4, p=0.05)))$Freq, "25.L.16" = as.data.frame(summary(decideTestsDGE(lrt.25.L.16, p=0.05)))$Freq,
+                                     "25.L.25" = as.data.frame(summary(decideTestsDGE(lrt.25.L.25, p=0.05)))$Freq,"25.L.49" = as.data.frame(summary(decideTestsDGE(lrt.25.L.49, p=0.05)))$Freq,
+                                     "26.L.4" = as.data.frame(summary(decideTestsDGE(lrt.26.L.4, p=0.05)))$Freq, "26.L.16" = as.data.frame(summary(decideTestsDGE(lrt.26.L.16, p=0.05)))$Freq,
+                                     "26.L.25" = as.data.frame(summary(decideTestsDGE(lrt.26.L.25, p=0.05)))$Freq,"26.L.49" = as.data.frame(summary(decideTestsDGE(lrt.26.L.49, p=0.05)))$Freq,
+                                     "27.L.4" = as.data.frame(summary(decideTestsDGE(lrt.27.L.4, p=0.05)))$Freq, "27.L.16" = as.data.frame(summary(decideTestsDGE(lrt.27.L.16, p=0.05)))$Freq,
+                                     "27.L.25" = as.data.frame(summary(decideTestsDGE(lrt.27.L.25, p=0.05)))$Freq, "27.L.49" = as.data.frame(summary(decideTestsDGE(lrt.27.L.49, p=0.05)))$Freq)
+DEGsfinal_number_between_gt_trt_time
+rownames(DEGsfinal_number_between_gt_trt_time) <- c("down", "no", "up")
+DEGsfinal_number_between_gt_trt_time <- DEGsfinal_number_between_gt_trt_time[c("down", "up"),]
+DEGsfinal_number_between_gt_trt_time
+save(DEGsfinal_number_between_gt_trt_time, file = "../output/DEGsfinal_number_between_gt_trt_time.Rdata")
+```
+
+```{r}
+library(reshape2)
+library(ggplot2)
+DEGsfinal_number_between_gt_trt_time.melt <- melt(DEGsfinal_number_between_gt_trt_time)
+DEGsfinal_number_between_gt_trt_time.melt$DE <- rep(c("down", "up"), 28)
+colnames(DEGsfinal_number_between_gt_trt_time.melt) <- c("genotype", "number", "DE")
+DEGsfinal_number_between_gt_trt_time.melt
+
+# reorder: up 1st down 2nd 
+DEGsfinal_number_between_gt_trt_time.melt$DE <- factor(DEGsfinal_number_between_gt_trt_time.melt$DE, levels = c("up", "down"))
+
+DEGsfinal_number_between_gt_trt_time.melt <- DEGsfinal_number_between_gt_trt_time.melt[order(DEGsfinal_number_between_gt_trt_time.melt$DE),]
+DEGsfinal_number_between_gt_trt_time.melt
+head(DEGs_number_between_gt_trt_time.melt)
+
+DEGsfinal_number_between_gt_trt_time.melt$gt <- gsub("(X)([[:digit:]]+)(\\.)(L)(\\.)(4|16|25|49)", "\\2",DEGsfinal_number_between_gt_trt_time.melt$genotype)
+
+DEGsfinal_number_between_gt_trt_time.melt$time <- gsub("(X)([[:digit:]]+)(\\.)(L)(\\.)(4|16|25|49)", "\\6",DEGsfinal_number_between_gt_trt_time.melt$genotype)
+
+### making ggplot for DEGs
+p.DEGsfinal_number_between_gt_trt_time <- ggplot(data = DEGsfinal_number_between_gt_trt_time.melt)
+p.DEGsfinal_number_between_gt_trt_time <- p.DEGsfinal_number_between_gt_trt_time + geom_bar(mapping = aes(fill=DE, x = factor(DE), y = number) , stat= "identity")
+p.DEGsfinal_number_between_gt_trt_time <- p.DEGsfinal_number_between_gt_trt_time + facet_grid(~genotype) 
+p.DEGsfinal_number_between_gt_trt_time <- p.DEGsfinal_number_between_gt_trt_time + labs(y = "number of differentially expressed genes", x = "")
+p.DEGsfinal_number_between_gt_trt_time
+ggsave(p.DEGsfinal_number_between_gt_trt_time, filename = "../output/p.DEGsfinal_number_between_gt_trt_time.png", height = 11, width = 25)
+```
+# we want to know what does expression pattern of DGE genes from three way interaction mean?
+
+counts.final <- read.csv("../input/NAMparents.coutns.final.csv", row.names = 1)
+load("../input/NAMparents.samples.nolow.final.Rdata")
+head(counts.final)
+counts.final[is.na(counts.final)]<-0
+library("DESeq2")
+dds.final <- DESeqDataSetFromMatrix(countData = round(counts.final), colData = samples.nolow.final, design = ~ batch + genotype*trt*time)
+vst.final <- varianceStabilizingTransformation(dds.final)
+vstMat.final <- assay(vst.final)
+head(vstMat.final)
+dim(vstMat.final)
+
+
+```{r}
+# 1) trasform my dataset from wide to long format
+library(reshape2)
+vstMat.final.melt <- melt(vstMat.final)
+head(vstMat.final.melt)
+tail(vstMat.final.melt)
+
+#2) get description for each factor of your VST normalized read count
+vstMat.final.melt$genotype<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\2",vstMat.final.melt$Var2))
+vstMat.final.melt$trt<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\3",vstMat.final.melt$Var2))
+vstMat.final.melt$time<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\4",vstMat.final.melt$Var2))
+# 3) get the mean across three biological replicate
+vstMat.final.melt.mean<-as.data.frame(tapply(vstMat.final.melt$value,list(vstMat.final.melt$Var1,vstMat.final.melt$genotype,vstMat.final.melt$trt,vstMat.final.melt$time),mean)) 
+colnames(vstMat.final.melt.mean)
+#modify colnames with gsub(the result of these two code are same) to have input file look like summary.vst file in Kazu data
+gsub("*[\\. ] *", "", colnames(vstMat.final.melt.mean))
+gsub("\\.","",colnames(vstMat.final.melt.mean))
+colnames(vstMat.final.melt.mean)<- gsub("\\.","",colnames(vstMat.final.melt.mean))
+rownames(vstMat.final.melt.mean)
+#fist we run expression.pattern.graph3.nam (written by Kazu)
+#then temp.data <- vstMat.final.melt.mean
+#target.genes <- "AT3G30122.1"
+#now we want to draw expression pattern for all 27 DE genes in three way interaction 
+DEgene.3.interaction <- topTags(dge.nolow.final.lrt,n = Inf)$table[topTags(dge.nolow.final.lrt,n = Inf)$table$FDR<0.05,]
+order(DEgene.3.interaction$FDR)
+dim(DEgene.3.interaction) # 27 32
+colnames(DEgene.3.interaction)
+#[1] "AT1G25098.1" "AT4G01870.1" "AT2G15555.1" "AT5G22530.1" "AT5G49440.1" "AT5G17890.1"
+#[7] "AT5G17380.1" "AT4G11650.1" "AT5G53700.1" "AT1G56470.1" "AT5G28919.1" "AT3G60955.1"
+#[13] "AT4G16870.1" "AT1G25097.1" "AT1G25175.1" "AT2G06950.1" "AT1G63870.1" "AT1G14870.1"
+#[19] "AT5G48180.1" "AT5G28692.1" "AT3G11340.1" "AT5G51070.1" "AT2G15292.1" "AT2G29350.1"
+#[25] "AT5G04000.2" "AT2G29460.1" "AT1G07430.1"
+
+#draw expression pattern for each genes in all genotypes response to all levels of time for both condition (H & L)
+p2 <-expression.pattern.graph3.nam(vstMat.final.melt.mean,target.genes=rownames(DEgene.3.interaction),plot.order=rownames(DEgene.3.interaction))
+
+p2
+ggsave(p2,file="../output/expression.pattern.graph.DEGthreeway2.png",width=11,height=25)
+
+save(vstMat.final.melt.mean, file = "../output/vstMat.final.melt.mean.Rdata")
+head(vstMat.final.melt.mean)
+dim(vstMat.final.melt.mean) # 22160 80
+
+```
+
+#design model for two way interaction (set gt 23 & trt H as the reference)
+```{r}
+load("../input/NAMparents.samplezs.nolow.final.Rdata")
+head(samples.nolow.final)
+str(samples.nolow.final)
+
+```
+
+#DE at any time point (sun)
+##subsetting data based on sun treatment for two way interaction(gt*time)
+
+```{r}
+load("../output/dge.nolow.final.Rdata")
+genotype<-levels(as.factor(samples.nolow.final$genotype))
+for(i in genotype[-4]) {
+samples.nolow.final.s<-samples.nolow.final[samples.nolow.final$genotype== "23"|samples.nolow.final$genotype==i,]
+
+samples.nolow.final.s<-samples.nolow.final.s[samples.nolow.final.s$trt=="H",] # only "sun" treatment
+samples.nolow.final.s$genotype<-as.factor(as.character(samples.nolow.final.s$genotype))
+samples.nolow.final.s$genotype<-relevel(samples.nolow.final.s$genotype,ref="23")
+dge.nolow.final.s<-dge.nolow.final[,colnames(dge.nolow.final) %in% samples.nolow.final.s$file]
+# eliminating low expressed genes in dge.final.s
+dge.nolow.final.s<-dge.nolow.final.s[rowSums(dge.nolow.final.s$counts > 5) >= 3,]
+design2.nolow.final<- model.matrix(~genotype*time+ batch, data=samples.nolow.final.s) 
+# new model to detect genes with gt*time effects 
+colnames(design2.nolow.final) <- gsub("samples.nolow.final.s$","",colnames(design2.nolow.final),fixed=TRUE) 
+# nicer column names
+colnames(design2.nolow.final)
+print(design2.nolow.final)
+dge.nolow.final.s.glm <- estimateGLMCommonDisp(dge.nolow.final.s,design2.nolow.final, verbose=T)
+dge.nolow.final.s.glm <- estimateGLMTrendedDisp(dge.nolow.final.s.glm ,design2.nolow.final, verbose=TRUE)
+dge.nolow.final.s.glm<-estimateGLMTagwiseDisp(dge.nolow.final.s.glm ,design2.nolow.final)
+dge.nolow.final.s.glm.fit <- glmFit(dge.nolow.final.s.glm,design2.nolow.final)
+genotype.alltime.coef<-c(paste("genotype",i,sep=""),paste("genotype",i,":time4",sep=""),paste("genotype",i,":time16",sep=""),paste("genotype",i,":time25",sep=""),paste("genotype",i,":time49",sep=""))  
+#got error different colnames(dge.nolow.final.s.glm.fit) with genotype.alltime.coef
+dge.nolow.final.glm.lrt <- glmLRT(dge.nolow.final.s.glm.fit,coef=genotype.alltime.coef)
+DEgene.2.interaction<-topTags(dge.nolow.final.glm.lrt,n=10000)$table[topTags(dge.nolow.final.glm.lrt,n=10000)$table$FDR<0.001,] 
+dim(DEgene.2.interaction) 
+save(dge.nolow.final.glm.lrt,file=paste("../output/dge.nolow.final.glm.lrt.sun",i,".Rdata",sep=""))
+}
+```
+
+#DE at any time point (shade)
+##subsetting data based on shade treatment for two way interaction(gt*time)
+
+```{r}
+genotype<-levels(as.factor(samples.nolow.final$genotype))
+for(i in genotype[-4]) {
+samples.nolow.final.s<-samples.nolow.final[samples.nolow.final$genotype== "23"|samples.nolow.final$genotype==i,]
+
+samples.nolow.final.s<-samples.nolow.final.s[samples.nolow.final.s$trt=="L",] # only "shade" treatment
+samples.nolow.final.s$genotype<-as.factor(as.character(samples.nolow.final.s$genotype))
+samples.nolow.final.s$genotype<-relevel(samples.nolow.final.s$genotype,ref="23")
+dge.nolow.final.s<-dge.nolow.final[,colnames(dge.nolow.final) %in% samples.nolow.final.s$file]
+# eliminating low expressed genes in dge.final.s
+dge.nolow.final.s<-dge.nolow.final.s[rowSums(dge.nolow.final.s$counts > 5) >= 3,]
+design2.nolow.final<- model.matrix(~genotype*time+ batch, data=samples.nolow.final.s) 
+# new model to detect genes with gt*time effects 
+colnames(design2.nolow.final) <- gsub("samples.nolow.final.s$","",colnames(design2.nolow.final),fixed=TRUE) 
+# nicer column names
+colnames(design2.nolow.final)
+print(design2.nolow.final)
+dge.nolow.final.s.glm <- estimateGLMCommonDisp(dge.nolow.final.s,design2.nolow.final, verbose=T)
+dge.nolow.final.s.glm <- estimateGLMTrendedDisp(dge.nolow.final.s.glm ,design2.nolow.final, verbose=TRUE)
+dge.nolow.final.s.glm<-estimateGLMTagwiseDisp(dge.nolow.final.s.glm ,design2.nolow.final)
+dge.nolow.final.s.glm.fit <- glmFit(dge.nolow.final.s.glm,design2.nolow.final)
+genotype.alltime.coef<-c(paste("genotype",i,sep=""),paste("genotype",i,":time4",sep=""),paste("genotype",i,":time16",sep=""),paste("genotype",i,":time25",sep=""),paste("genotype",i,":time49",sep=""))  
+#got error different colnames(dge.nolow.final.s.glm.fit) with genotype.alltime.coef
+dge.nolow.final.glm.lrt <- glmLRT(dge.nolow.final.s.glm.fit,coef=genotype.alltime.coef)
+DEgene.2.interaction<-topTags(dge.nolow.final.glm.lrt,n=10000)$table[topTags(dge.nolow.final.glm.lrt,n=10000)$table$FDR<0.001,] 
+dim(DEgene.2.interaction) 
+save(dge.nolow.final.glm.lrt,file=paste("../output/dge.nolow.final.glm.lrt.shade",i,".Rdata",sep=""))
+}
+```
+
+
+#DE at any treatment(shade & sun ) for timepoint 4
+##subsetting data based on timepoint=4 for two way interaction(gt*trt)
+
+```{r}
+genotype<-levels(as.factor(samples.nolow.final$genotype))
+for(i in genotype[-4]) {
+samples.nolow.final.s<-samples.nolow.final[samples.nolow.final$genotype== "23"|samples.nolow.final$genotype==i,]
+
+samples.nolow.final.s<-samples.nolow.final.s[samples.nolow.final.s$time=="4",] # only "4" timepoint
+samples.nolow.final.s$genotype<-as.factor(as.character(samples.nolow.final.s$genotype))
+samples.nolow.final.s$genotype<-relevel(samples.nolow.final.s$genotype,ref="23")
+dge.nolow.final.s<-dge.nolow.final[,colnames(dge.nolow.final) %in% samples.nolow.final.s$file]
+# eliminating low expressed genes in dge.final.s
+dge.nolow.final.s<-dge.nolow.final.s[rowSums(dge.nolow.final.s$counts > 5) >= 3,]
+design3.nolow.final<- model.matrix(~genotype*trt+ batch, data=samples.nolow.final.s) 
+# new model to detect genes with gt*trt effects 
+colnames(design3.nolow.final) <- gsub("samples.nolow.final.s$","",colnames(design3.nolow.final),fixed=TRUE) 
+# nicer column names
+colnames(design3.nolow.final)
+print(design3.nolow.final)
+dge.nolow.final.s.glm <- estimateGLMCommonDisp(dge.nolow.final.s,design3.nolow.final, verbose=T)
+dge.nolow.final.s.glm <- estimateGLMTrendedDisp(dge.nolow.final.s.glm ,design3.nolow.final, verbose=TRUE)
+dge.nolow.final.s.glm<-estimateGLMTagwiseDisp(dge.nolow.final.s.glm ,design3.nolow.final)
+dge.nolow.final.s.glm.fit <- glmFit(dge.nolow.final.s.glm,design3.nolow.final)
+#genotype.alltrt.coef<-c(paste("genotype",i,sep=""),paste("genotype",i,":trtH",sep=""),paste("genotype",i,":trtL",sep="")) # the last ")" was missing (090517, KN)
+genotype.alltrt.coef<-c(paste("genotype",i,sep=""),paste("genotype",i,":trtL",sep="")) # the last ")" was missing (090517, KN)
+
+#got error different colnames(dge.nolow.final.s.glm.fit) with genotype.alltime.coef
+dge.nolow.final.glm.lrt <- glmLRT(dge.nolow.final.s.glm.fit,coef=genotype.alltrt.coef)
+DEgene.3.interaction<-topTags(dge.nolow.final.glm.lrt,n=10000)$table[topTags(dge.nolow.final.glm.lrt,n=10000)$table$FDR<0.001,] 
+dim(DEgene.3.interaction) 
+save(dge.nolow.final.glm.lrt,file=paste("../output/dge.nolow.final.glm.lrt.time4",i,".Rdata",sep=""))
+}
+```
+
+#DE at any treatment(shade & sun ) for timepoint 25
+##subsetting data based on timepoint=25 for two way interaction(gt*trt)
+
+```{r}
+genotype<-levels(as.factor(samples.nolow.final$genotype))
+for(i in genotype[-4]) {
+samples.nolow.final.s<-samples.nolow.final[samples.nolow.final$genotype== "23"|samples.nolow.final$genotype==i,]
+
+samples.nolow.final.s<-samples.nolow.final.s[samples.nolow.final.s$time=="25",] # only "25" timepoint
+samples.nolow.final.s$genotype<-as.factor(as.character(samples.nolow.final.s$genotype))
+samples.nolow.final.s$genotype<-relevel(samples.nolow.final.s$genotype,ref="23")
+dge.nolow.final.s<-dge.nolow.final[,colnames(dge.nolow.final) %in% samples.nolow.final.s$file]
+# eliminating low expressed genes in dge.final.s
+dge.nolow.final.s<-dge.nolow.final.s[rowSums(dge.nolow.final.s$counts > 5) >= 3,]
+design3.nolow.final<- model.matrix(~genotype*trt+ batch, data=samples.nolow.final.s) 
+# new model to detect genes with gt*trt effects 
+colnames(design3.nolow.final) <- gsub("samples.nolow.final.s$","",colnames(design3.nolow.final),fixed=TRUE) 
+# nicer column names
+colnames(design3.nolow.final)
+print(design3.nolow.final)
+dge.nolow.final.s.glm <- estimateGLMCommonDisp(dge.nolow.final.s,design3.nolow.final, verbose=T)
+dge.nolow.final.s.glm <- estimateGLMTrendedDisp(dge.nolow.final.s.glm ,design3.nolow.final, verbose=TRUE)
+dge.nolow.final.s.glm<-estimateGLMTagwiseDisp(dge.nolow.final.s.glm ,design3.nolow.final)
+dge.nolow.final.s.glm.fit <- glmFit(dge.nolow.final.s.glm,design3.nolow.final)
+#genotype.alltrt.coef<-c(paste("genotype",i,sep=""),paste("genotype",i,":trtH",sep=""),paste("genotype",i,":trtL",sep="")) # the last ")" was missing (090517, KN)
+genotype.alltrt.coef<-c(paste("genotype",i,sep=""),paste("genotype",i,":trtL",sep="")) # the last ")" was missing (090517, KN)
+
+#got error different colnames(dge.nolow.final.s.glm.fit) with genotype.alltime.coef
+dge.nolow.final.glm.lrt <- glmLRT(dge.nolow.final.s.glm.fit,coef=genotype.alltrt.coef)
+DEgene.3.interaction<-topTags(dge.nolow.final.glm.lrt,n=10000)$table[topTags(dge.nolow.final.glm.lrt,n=10000)$table$FDR<0.001,] 
+dim(DEgene.3.interaction) 
+save(dge.nolow.final.glm.lrt,file=paste("../output/dge.nolow.final.glm.lrt.time25",i,".Rdata",sep=""))
+}
+```
+
+#DE at any treatment(shade & sun ) for timepoint 49
+##subsetting data based on timepoint=49 for two way interaction(gt*trt)
+
+```{r}
+genotype<-levels(as.factor(samples.nolow.final$genotype))
+for(i in genotype[-4]) {
+samples.nolow.final.s<-samples.nolow.final[samples.nolow.final$genotype== "23"|samples.nolow.final$genotype==i,]
+
+samples.nolow.final.s<-samples.nolow.final.s[samples.nolow.final.s$time=="49",] # only "49" timepoint
+samples.nolow.final.s$genotype<-as.factor(as.character(samples.nolow.final.s$genotype))
+samples.nolow.final.s$genotype<-relevel(samples.nolow.final.s$genotype,ref="23")
+dge.nolow.final.s<-dge.nolow.final[,colnames(dge.nolow.final) %in% samples.nolow.final.s$file]
+# eliminating low expressed genes in dge.final.s
+dge.nolow.final.s<-dge.nolow.final.s[rowSums(dge.nolow.final.s$counts > 5) >= 3,]
+design3.nolow.final<- model.matrix(~genotype*trt+ batch, data=samples.nolow.final.s) 
+# new model to detect genes with gt*trt effects 
+colnames(design3.nolow.final) <- gsub("samples.nolow.final.s$","",colnames(design3.nolow.final),fixed=TRUE) 
+# nicer column names
+colnames(design3.nolow.final)
+print(design3.nolow.final)
+dge.nolow.final.s.glm <- estimateGLMCommonDisp(dge.nolow.final.s,design3.nolow.final, verbose=T)
+dge.nolow.final.s.glm <- estimateGLMTrendedDisp(dge.nolow.final.s.glm ,design3.nolow.final, verbose=TRUE)
+dge.nolow.final.s.glm<-estimateGLMTagwiseDisp(dge.nolow.final.s.glm ,design3.nolow.final)
+dge.nolow.final.s.glm.fit <- glmFit(dge.nolow.final.s.glm,design3.nolow.final)
+#genotype.alltrt.coef<-c(paste("genotype",i,sep=""),paste("genotype",i,":trtH",sep=""),paste("genotype",i,":trtL",sep="")) # the last ")" was missing (090517, KN)
+genotype.alltrt.coef<-c(paste("genotype",i,sep=""),paste("genotype",i,":trtL",sep="")) # the last ")" was missing (090517, KN)
+
+#got error different colnames(dge.nolow.final.s.glm.fit) with genotype.alltime.coef
+dge.nolow.final.glm.lrt <- glmLRT(dge.nolow.final.s.glm.fit,coef=genotype.alltrt.coef)
+DEgene.3.interaction<-topTags(dge.nolow.final.glm.lrt,n=10000)$table[topTags(dge.nolow.final.glm.lrt,n=10000)$table$FDR<0.001,] 
+dim(DEgene.3.interaction) 
+save(dge.nolow.final.glm.lrt,file=paste("../output/dge.nolow.final.glm.lrt.time49",i,".Rdata",sep=""))
+}
+```
+
+#DE at any treatment(shade & sun ) for timepoint 16
+##subsetting data based on timepoint=16 for two way interaction(gt*trt)
+
+```{r}
+genotype<-levels(as.factor(samples.nolow.final$genotype))
+for(i in genotype[-4]) {
+samples.nolow.final.s<-samples.nolow.final[samples.nolow.final$genotype== "23"|samples.nolow.final$genotype==i,]
+
+samples.nolow.final.s<-samples.nolow.final.s[samples.nolow.final.s$time=="16",] # only "16" timepoint
+samples.nolow.final.s$genotype<-as.factor(as.character(samples.nolow.final.s$genotype))
+samples.nolow.final.s$genotype<-relevel(samples.nolow.final.s$genotype,ref="23")
+dge.nolow.final.s<-dge.nolow.final[,colnames(dge.nolow.final) %in% samples.nolow.final.s$file]
+# eliminating low expressed genes in dge.final.s
+dge.nolow.final.s<-dge.nolow.final.s[rowSums(dge.nolow.final.s$counts > 5) >= 3,]
+design3.nolow.final<- model.matrix(~genotype*trt+ batch, data=samples.nolow.final.s) 
+# new model to detect genes with gt*trt effects 
+colnames(design3.nolow.final) <- gsub("samples.nolow.final.s$","",colnames(design3.nolow.final),fixed=TRUE) 
+# nicer column names
+colnames(design3.nolow.final)
+print(design3.nolow.final)
+dge.nolow.final.s.glm <- estimateGLMCommonDisp(dge.nolow.final.s,design3.nolow.final, verbose=T)
+dge.nolow.final.s.glm <- estimateGLMTrendedDisp(dge.nolow.final.s.glm ,design3.nolow.final, verbose=TRUE)
+dge.nolow.final.s.glm<-estimateGLMTagwiseDisp(dge.nolow.final.s.glm ,design3.nolow.final)
+dge.nolow.final.s.glm.fit <- glmFit(dge.nolow.final.s.glm,design3.nolow.final)
+#genotype.alltrt.coef<-c(paste("genotype",i,sep=""),paste("genotype",i,":trtH",sep=""),paste("genotype",i,":trtL",sep="")) # the last ")" was missing (090517, KN)
+genotype.alltrt.coef<-c(paste("genotype",i,sep=""),paste("genotype",i,":trtL",sep="")) # the last ")" was missing (090517, KN)
+
+#got error different colnames(dge.nolow.final.s.glm.fit) with genotype.alltime.coef
+dge.nolow.final.glm.lrt <- glmLRT(dge.nolow.final.s.glm.fit,coef=genotype.alltrt.coef)
+DEgene.3.interaction<-topTags(dge.nolow.final.glm.lrt,n=10000)$table[topTags(dge.nolow.final.glm.lrt,n=10000)$table$FDR<0.001,] 
+dim(DEgene.3.interaction) 
+save(dge.nolow.final.glm.lrt,file=paste("../output/dge.nolow.final.glm.lrt.time16",i,".Rdata",sep=""))
+}
+```
+
+#DE at any treatment(shade & sun ) for timepoint 1
+##subsetting data based on timepoint=1 for two way interaction(gt*trt)
+
+```{r}
+genotype<-levels(as.factor(samples.nolow.final$genotype))
+for(i in genotype[-4]) {
+samples.nolow.final.s<-samples.nolow.final[samples.nolow.final$genotype== "23"|samples.nolow.final$genotype==i,]
+
+samples.nolow.final.s<-samples.nolow.final.s[samples.nolow.final.s$time=="1",] # only "1" timepoint
+samples.nolow.final.s$genotype<-as.factor(as.character(samples.nolow.final.s$genotype))
+samples.nolow.final.s$genotype<-relevel(samples.nolow.final.s$genotype,ref="23")
+dge.nolow.final.s<-dge.nolow.final[,colnames(dge.nolow.final) %in% samples.nolow.final.s$file]
+# eliminating low expressed genes in dge.final.s
+dge.nolow.final.s<-dge.nolow.final.s[rowSums(dge.nolow.final.s$counts > 5) >= 3,]
+design3.nolow.final<- model.matrix(~genotype*trt+ batch, data=samples.nolow.final.s) 
+# new model to detect genes with gt*trt effects 
+colnames(design3.nolow.final) <- gsub("samples.nolow.final.s$","",colnames(design3.nolow.final),fixed=TRUE) 
+# nicer column names
+colnames(design3.nolow.final)
+print(design3.nolow.final)
+dge.nolow.final.s.glm <- estimateGLMCommonDisp(dge.nolow.final.s,design3.nolow.final, verbose=T)
+dge.nolow.final.s.glm <- estimateGLMTrendedDisp(dge.nolow.final.s.glm ,design3.nolow.final, verbose=TRUE)
+dge.nolow.final.s.glm<-estimateGLMTagwiseDisp(dge.nolow.final.s.glm ,design3.nolow.final)
+dge.nolow.final.s.glm.fit <- glmFit(dge.nolow.final.s.glm,design3.nolow.final)
+#genotype.alltrt.coef<-c(paste("genotype",i,sep=""),paste("genotype",i,":trtH",sep=""),paste("genotype",i,":trtL",sep="")) # the last ")" was missing (090517, KN)
+genotype.alltrt.coef<-c(paste("genotype",i,sep=""),paste("genotype",i,":trtL",sep="")) # the last ")" was missing (090517, KN)
+
+#got error different colnames(dge.nolow.final.s.glm.fit) with genotype.alltime.coef
+dge.nolow.final.glm.lrt <- glmLRT(dge.nolow.final.s.glm.fit,coef=genotype.alltrt.coef)
+DEgene.3.interaction<-topTags(dge.nolow.final.glm.lrt,n=10000)$table[topTags(dge.nolow.final.glm.lrt,n=10000)$table$FDR<0.001,] 
+dim(DEgene.3.interaction) 
+save(dge.nolow.final.glm.lrt,file=paste("../output/dge.nolow.final.glm.lrt.time1",i,".Rdata",sep=""))
+}
+```
+
+```{r}
+# GO enrichment analysis
+rm(list=ls())
+file.DE<-list.files(path="../output/",pattern="dge.nolow.final.glm.lrt")
+
+load(paste("../output/",file.DE[1],sep=""))
+
+DEgene.3.interaction<-topTags(dge.nolow.final.glm.lrt,n=10000)$table[topTags(dge.nolow.final.glm.lrt,n=10000)$table$FDR<0.001,]
+
+# example run this all x in file.DE
+DE.AGI<-gsub("([[:print:]]+)(.)([[:digit:]])","\\1",rownames(DEgene.3.interaction))
+for(x in file.DE) {  
+  temp.GOseq<-GOseq.ORA(DE.AGI)
+  if(temp.GOseq=="no enriched GO") {next} else {
+     temp.genes<-genes.in.enriched.category(enrich.result=temp.GOseq,gene.list=DE.AGI,category.table=Atgo.list)
+    
+ save(temp.GOseq,temp.genes,file=paste("../output/SOM.Col.cluster.",x,".GOseq.Rdata",sep=""))
+  } 
+}
+```
+
+```{r}
+load("../input/NAMparents.samples.nolow.final.Rdata")
+head(samples.nolow.final)
+str(samples.nolow.final)
+load("../output/dge.nolow.final.Rdata")
+genotype<-levels(as.factor(samples.nolow.final$genotype))
+
+
+# we want to know what does expression pattern of DGE genes from two way interaction mean?for gt:time on sun treatment (gt20:time on sun)
+
+counts.final <- read.csv("../input/NAMparents.coutns.final.csv", row.names = 1)
+load("../input/NAMparents.samples.nolow.final.Rdata")
+head(counts.final)
+counts.final[is.na(counts.final)]<-0
+library("DESeq2")
+samples.nolow.final.s<-samples.nolow.final[samples.nolow.final$genotype== "23"|samples.nolow.final$genotype==20,]
+
+samples.nolow.final.s<-samples.nolow.final.s[samples.nolow.final.s$trt=="H",] # only "sun" treatment
+samples.nolow.final.s$genotype<-as.factor(as.character(samples.nolow.final.s$genotype))
+samples.nolow.final.s$genotype<-relevel(samples.nolow.final.s$genotype,ref="23")
+counts.final.gt20H <- read.csv("../input/NAMparents.coutns.final.gt20H.csv", row.names = 1)
+dds.final.gt20H <- DESeqDataSetFromMatrix(countData = round(counts.final.gt20H), colData = samples.nolow.final.s, design = ~ genotype*time+ batch)
+
+vst.final.gt20H <- varianceStabilizingTransformation(dds.final.gt20H)
+vstMat.final.gt20H <- assay(vst.final.gt20H)
+head(vstMat.final.gt20H)
+dim(vstMat.final.gt20H)
+# 1) trasform my dataset from wide to long format
+library(reshape2)
+vstMat.final.melt.20H <- melt(vstMat.final.gt20H)
+head(vstMat.final.melt.20H)
+tail(vstMat.final.melt.20H)
+
+#2) get description for each factor of your VST normalized read count
+vstMat.final.melt.20H$genotype<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\2",vstMat.final.melt.20H$Var2))
+vstMat.final.melt.20H$trt<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\3",vstMat.final.melt.20H$Var2))
+vstMat.final.melt.20H$time<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\4",vstMat.final.melt.20H$Var2))
+# 3) get the mean across three biological replicate
+vstMat.final.melt.mean.20H<-as.data.frame(tapply(vstMat.final.melt.20H$value,list(vstMat.final.melt.20H$Var1,vstMat.final.melt.20H$genotype,vstMat.final.melt.20H$trt,vstMat.final.melt.20H$time),mean)) 
+colnames(vstMat.final.melt.mean.20H)
+#modify colnames with gsub(the result of these two code are same) to have input file look like summary.vst file in Kazu data
+gsub("*[\\. ] *", "", colnames(vstMat.final.melt.mean))
+gsub("\\.","",colnames(vstMat.final.melt.mean))
+colnames(vstMat.final.melt.mean.20H)<- gsub("\\.","",colnames(vstMat.final.melt.mean.20H))
+rownames(vstMat.final.melt.mean.20H)
+
+
+#now we want to draw expression pattern for all  DE genes in two way interaction gt:time on sun treatment
+DEgene.2.interaction.20H<-topTags(dge.nolow.final.glm.lrt20H,n=10000)$table[topTags(dge.nolow.final.glm.lrt20H,n=10000)$table$FDR<0.001,] 
+dim(DEgene.2.interaction.20H) 
+order(DEgene.2.interaction.20H$FDR)
+
+row.names(DEgene.2.interaction.20H) #for first 30 genes
+
+#draw expression pattern for each genes in all genotypes response to all levels of time in sun condition
+p20H <-expression.pattern.graph3.nam(vstMat.final.melt.mean.20H,target.genes=rownames(DEgene.2.interaction.20H)[1:30],plot.order=rownames(DEgene.2.interaction.20H))
+
+p20H
+save(p20H,file = "../output_dge.nolow.final.glm.lrt_gt_seperately/p20H.Rdata")
+ggsave(p20H,file="../output/expression.pattern.graph.DEG_Twoway.gt20H.png",width=11,height=25)
+
+save(vstMat.final.melt.mean.20H, file = "../output/vstMat.final.melt.mean.20H.Rdata")
+head(vstMat.final.melt.mean.20H)
+dim(vstMat.final.melt.mean.20H) # 221060 10
+```
+
+# we want to know what does expression pattern of DGE genes from two way interaction mean?for gt:time on sun treatment (gt20:time on shade)
+```{r}
+counts.final <- read.csv("../input/NAMparents.coutns.final.csv", row.names = 1)
+load("../input/NAMparents.samples.nolow.final.Rdata")
+head(counts.final)
+counts.final[is.na(counts.final)]<-0
+library("DESeq2")
+samples.nolow.final.s<-samples.nolow.final[samples.nolow.final$genotype== "23"|samples.nolow.final$genotype==20,]
+
+samples.nolow.final.s<-samples.nolow.final.s[samples.nolow.final.s$trt=="L",] # only "shade" treatment
+samples.nolow.final.s$genotype<-as.factor(as.character(samples.nolow.final.s$genotype))
+samples.nolow.final.s$genotype<-relevel(samples.nolow.final.s$genotype,ref="23")
+counts.final.gt20L <- read.csv("../input/NAMparents.coutns.final.gt20L.csv", row.names = 1)
+dds.final.gt20L <- DESeqDataSetFromMatrix(countData = round(counts.final.gt20L), colData = samples.nolow.final.s, design = ~ genotype*time+ batch)
+
+vst.final.gt20L <- varianceStabilizingTransformation(dds.final.gt20L)
+vstMat.final.gt20L <- assay(vst.final.gt20L)
+head(vstMat.final.gt20L)
+dim(vstMat.final.gt20L)
+# 1) trasform my dataset from wide to long format
+library(reshape2)
+vstMat.final.melt.20L <- melt(vstMat.final.gt20L)
+head(vstMat.final.melt.20L)
+tail(vstMat.final.melt.20L)
+
+#2) get description for each factor of your VST normalized read count
+vstMat.final.melt.20L$genotype<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\2",vstMat.final.melt.20L$Var2))
+vstMat.final.melt.20L$trt<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\3",vstMat.final.melt.20L$Var2))
+vstMat.final.melt.20L$time<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\4",vstMat.final.melt.20L$Var2))
+# 3) get the mean across three biological replicate
+vstMat.final.melt.mean.20L<-as.data.frame(tapply(vstMat.final.melt.20L$value,list(vstMat.final.melt.20L$Var1,vstMat.final.melt.20L$genotype,vstMat.final.melt.20L$trt,vstMat.final.melt.20L$time),mean)) 
+colnames(vstMat.final.melt.mean.20L)
+#modify colnames with gsub(the result of these two code are same) to have input file look like summary.vst file in Kazu data
+gsub("*[\\. ] *", "", colnames(vstMat.final.melt.mean))
+gsub("\\.","",colnames(vstMat.final.melt.mean))
+colnames(vstMat.final.melt.mean.20L)<- gsub("\\.","",colnames(vstMat.final.melt.mean.20L))
+rownames(vstMat.final.melt.mean.20L)
+
+
+#now we want to draw expression pattern for all  DE genes in two way interaction gt:time on sun treatment
+DEgene.2.interaction.20L<-topTags(dge.nolow.final.glm.lrt20L,n=10000)$table[topTags(dge.nolow.final.glm.lrt20L,n=10000)$table$FDR<0.001,] 
+dim(DEgene.2.interaction.20L) 
+order(DEgene.2.interaction.20L$FDR)
+
+row.names(DEgene.2.interaction.20L) #for first 30 genes
+
+
+#draw expression pattern for each genes in all genotypes response to all levels of time in sun condition
+p20L <-expression.pattern.graph3.nam(vstMat.final.melt.mean.20L,target.genes=rownames(DEgene.2.interaction.20L)[1:30],plot.order=rownames(DEgene.2.interaction.20L))
+
+p2
+ggsave(p2,file="../output/expression.pattern.graph.DEGthreeway.20L.png",width=11,height=25)
+
+save(vstMat.final.melt.mean.20L, file = "../output/vstMat.final.melt.mean.20L.Rdata")
+head(vstMat.final.melt.mean.20L)
+dim(vstMat.final.melt.mean.20L) #
+```
+
