@@ -1,0 +1,901 @@
+---
+```{r}
+#preparation
+#import data
+test1 <- read.delim ("~/genes.tsv", header=T, check.names = F)
+#this will make the 1st column as my rownames.
+#test1 <- read.table("genes.tsv", header=T, row.names="gene")
+#test1=read.table("genes.tsv",header=T,row.names=1)
+colnames(test1)[1] 
+rownames(test1) <- test1$Gene
+rownames(test1) 
+#eliminating libraries with wrong genotypes
+counts=subset(test1, select= grepl("^.[2][0-7].*", names(test1)))
+head(counts)
+colnames(counts)
+#number 1-4 presenting character before equal
+samples <- data.frame(file=colnames(counts),
+                      batch=factor(sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\1",colnames(counts))),
+                      trt=factor(sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\3",colnames(counts))),
+                      time=factor(sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\4",colnames(counts))),
+                      genotype=factor(sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\2",colnames(counts)))) 
+head(samples) 
+```
+
+```{r}
+# filter based on read count, assign group, normalize, design matrix
+## histogram
+hist(colSums(counts,na.rm=TRUE))
+## lower part
+hist(colSums(counts,na.rm=TRUE)[colSums(counts,na.rm=TRUE) < 5000000]) # should we use colSums(counts,na.rm=TRUE) < 2000000 below? (Kazu, 041117)
+# ## too high?
+# hist(colSums(counts,na.rm=TRUE)[colSums(counts,na.rm=TRUE) > 10000000]) #  (Kazu, 041117)
+# counts[,colSums(counts,na.rm=TRUE) > 20000000]
+# counts[,colSums(counts,na.rm=TRUE) > 50000000]
+
+## general threshold is colSums(counts,na.rm=TRUE) > 1000000
+counts.nolow <- counts[,colSums(counts,na.rm=TRUE) > 1000000]
+samples.low<-samples[samples$file %in% names(counts)[colSums(counts,na.rm=TRUE) < 1000000],]
+samples.low
+samples.low$counts<-colSums(counts,na.rm=TRUE)[colSums(counts,na.rm=TRUE) < 1000000]
+
+
+
+names(counts.nolow)
+#convert NA to zero
+counts.nolow[is.na(counts.nolow)]<-0
+#assign group
+counts.nolow.small <-counts.nolow[rowSums(counts.nolow > 10) >= 3,]
+samples.nolow <- data.frame(file=colnames(counts.nolow.small),
+                      batch=factor(sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\1",colnames(counts.nolow.small))),
+                      trt=factor(sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\3",colnames(counts.nolow.small))),
+                      time=factor(sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\4",colnames(counts.nolow.small))),
+                      genotype=factor(sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\2",colnames(counts.nolow.small)))
+)
+summary(counts.nolow) #just give a summary of the first 10
+nrow(samples) # 210 
+nrow(samples.nolow) # 205
+head(samples.nolow)
+
+
+```
+# 
+
+```{r}
+#normalizing
+#combine all the experimental factors into one combined factor
+Genotype<-levels(samples.nolow$genotype)
+samples.nolow$group <- paste(samples.nolow$genotype,samples.nolow$trt,samples.nolow$time,sep=".")
+samples.nolow$genotype<-as.character(samples.nolow$genotype)
+
+library(edgeR)
+dge.nolow <- DGEList(counts=counts.nolow.small,group=samples.nolow$group) 
+head(counts.nolow)
+length(colnames(counts.nolow.small)) # 205 
+dge.nolow<-calcNormFactors(dge.nolow, method = "TMM")
+# look at the normalization factors
+nrow(dge.nolow$samples) # 205 
+hist(dge.nolow$samples[,3])
+dge.nolow$sample[dge.nolow$sample[,3] < 0.8,] # these two samples need to be removed, too low sample size... 
+# not because of small library size (there are more libraries with similar size; 041117 Kazu)
+# 
+#find two sapmles with low library size
+sort(dge.nolow$sample[,2])
+#          group lib.size norm.factors
+# D23H16A 23.H.16  1210313   0.02714546
+# D25H16A 25.H.16  3923312   0.53518489
+
+#plot(log10(dge.nolow$sample[,"lib.size"]),dge.nolow$sample[,"norm.factors"])
+
+colSums(counts.nolow,na.rm=TRUE)
+mean(colSums(counts.nolow, na.rm=T))
+sum(counts.nolow$D23H16A) # 1210313
+sum(counts.nolow$D25H16A) # 3923312  
+
+# remove the two problematic samples from both counts and sample, and renormalize 
+counts.nolow.1 <- counts.nolow[,(colnames(counts.nolow)!="D23H16A" & colnames(counts.nolow)!="D25H16A")]
+
+ncol(counts.nolow.1) # 203, the two problematic samples were removed 
+
+# now make sample description file with this new dataset 
+samples.nolow.1 <- data.frame(file=colnames(counts.nolow.1),
+                            batch=factor(sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\1",colnames(counts.nolow.1))),
+                            trt=factor(sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\3",colnames(counts.nolow.1))),
+                            time=factor(sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\4",colnames(counts.nolow.1))),
+                            genotype=factor(sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\2",colnames(counts.nolow.1))))
+
+summary(counts.nolow.1)
+nrow(samples.nolow.1) # 203
+```
+
+
+```{r}
+#normalizing
+samples.nolow.1$group <- paste(samples.nolow.1$genotype,samples.nolow.1$trt,samples.nolow.1$time,sep=".")
+
+samples.nolow.1$genotype<-as.character(samples.nolow.1$genotype)
+
+dge.nolow.1 <- DGEList(counts=counts.nolow.1,group=samples.nolow.1$group) 
+dge.nolow.1 <-calcNormFactors(dge.nolow.1, method = "TMM")
+
+hist(dge.nolow.1$samples[,3]) # great, now all the samples have similar sizes 
+
+# we are interested in all the sampels here, all of the genotypes and treatment and time points 
+# calculating cpm
+temp<-cpm(dge.nolow.1)
+
+# filter based on read count: eliminating low expressed genes in dge.nolow.1
+#In this case we will retain genes with > 10 reads in >= 3 samples
+ 
+##dge.nolow.1 <-dge.nolow.1[rowSums(dge.nolow.1$counts > 10) >= 3,]
+
+#when we want to change the ref from firt genotype to other genotype(chang from 20 to 23)
+samples.nolow.1$genotype <- as.factor(samples.nolow.1$genotype)
+samples.nolow.1$trt <- as.factor(samples.nolow.1$trt)
+samples.nolow.1$genotype <- relevel(samples.nolow.1$genotype,ref="23")
+samples.nolow.1$trt <- relevel(samples.nolow.1$trt,ref="H")
+###########
+design2.nolow.1 <- model.matrix(~genotype*time + batch , data=samples.nolow.1)
+colnames(design2.nolow.1)
+###########
+design.nolow.1 <- model.matrix(~genotype*trt + batch , data=samples.nolow.1)
+colnames(design.nolow.1)
+
+
+#First the overall dispersion
+dge.nolow.1 <- estimateGLMCommonDisp(dge.nolow.1, design2.nolow.1, verbose = T)##Disp = 0.04007 , BCV = 0.2002##
+dge.nolow.1 <- estimateGLMTrendedDisp(dge.nolow.1, design2.nolow.1)
+dge.nolow.1 <- estimateGLMTagwiseDisp(dge.nolow.1, design2.nolow.1)
+plotBCV(dge.nolow.1)
+mds.dge.nolow.1 <- plotMDS(dge.nolow.1, method = "bcv",labels = dge.nolow.1$samples$group)
+
+dge.nolow.1.fit <- glmFit(dge.nolow.1, design2.nolow.1)
+colnames(dge.nolow.1.fit$design)
+
+# this function find out genes that have gt:time effect in any genotypes (genotype 23 as reference level)
+dge.nolow.1.lrt <- glmLRT(dge.nolow.1.fit,coef=c("genotype20:time4","genotype20:time16","genotype20:time25","genotype20:time49","genotype21:time4","genotype21:time16","genotype21:time25","genotype21:time49","genotype22:time4","genotype22:time16","genotype22:time25","genotype22:time49","genotype24:time4","genotype24:time16","genotype24:time25","genotype24:time49","genotype25:time4","genotype25:time16","genotype25:time25","genotype25:time49","genotype25:time4","genotype25:time16","genotype25:time25", "genotype25:time49", "genotype26:time4", "genotype26:time16","genotype26:time25","genotype26:time49", "genotype27:time4","genotype27:time16", "genotype27:time25","genotype27:time49"))
+
+lrt.20.4 <- glmLRT(dge.nolow.1.fit,coef=c("genotype20:time4")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.20.4)
+summary(decideTestsDGE(lrt.20.4, p=0.05))
+
+lrt.20.16 <- glmLRT(dge.nolow.1.fit,coef=c("genotype20:time16")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.20.16)
+summary(decideTestsDGE(lrt.20.16, p=0.05))
+lrt.20.25 <- glmLRT(dge.nolow.1.fit,coef=c("genotype20:time25")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.20.25)
+summary(decideTestsDGE(lrt.20.25, p=0.05))
+lrt.20.49 <- glmLRT(dge.nolow.1.fit,coef=c("genotype20:time49")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.20.49)
+summary(decideTestsDGE(lrt.20.49, p=0.05))
+
+lrt.21.4 <- glmLRT(dge.nolow.1.fit,coef=c("genotype21:time4")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.21.4)
+summary(decideTestsDGE(lrt.21.4, p=0.05))
+
+lrt.21.16 <- glmLRT(dge.nolow.1.fit,coef=c("genotype21:time16")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.21.16)
+summary(decideTestsDGE(lrt.21.16, p=0.05))
+lrt.21.25 <- glmLRT(dge.nolow.1.fit,coef=c("genotype21:time25")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.21.25)
+summary(decideTestsDGE(lrt.21.25, p=0.05))
+lrt.21.49 <- glmLRT(dge.nolow.1.fit,coef=c("genotype21:time49")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.21.49)
+summary(decideTestsDGE(lrt.21.49, p=0.05))
+
+lrt.22.4 <- glmLRT(dge.nolow.1.fit,coef=c("genotype22:time4")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.22.4)
+summary(decideTestsDGE(lrt.22.4, p=0.05))
+
+lrt.22.16 <- glmLRT(dge.nolow.1.fit,coef=c("genotype22:time16")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.22.16)
+summary(decideTestsDGE(lrt.22.16, p=0.05))
+lrt.22.25 <- glmLRT(dge.nolow.1.fit,coef=c("genotype22:time25")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.22.25)
+summary(decideTestsDGE(lrt.22.25, p=0.05))
+lrt.22.49 <- glmLRT(dge.nolow.1.fit,coef=c("genotype22:time49")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.22.49)
+summary(decideTestsDGE(lrt.22.49, p=0.05))
+
+lrt.24.4 <- glmLRT(dge.nolow.1.fit,coef=c("genotype24:time4")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.24.4)
+summary(decideTestsDGE(lrt.24.4, p=0.05))
+
+lrt.24.16 <- glmLRT(dge.nolow.1.fit,coef=c("genotype24:time16")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.24.16)
+summary(decideTestsDGE(lrt.24.16, p=0.05))
+lrt.24.25 <- glmLRT(dge.nolow.1.fit,coef=c("genotype24:time25")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.24.25)
+summary(decideTestsDGE(lrt.24.25, p=0.05))
+lrt.24.49 <- glmLRT(dge.nolow.1.fit,coef=c("genotype24:time49")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.24.49)
+summary(decideTestsDGE(lrt.24.49, p=0.05))
+ 
+lrt.25.4 <- glmLRT(dge.nolow.1.fit,coef=c("genotype25:time4")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.25.4)
+summary(decideTestsDGE(lrt.25.4, p=0.05))
+
+lrt.25.16 <- glmLRT(dge.nolow.1.fit,coef=c("genotype25:time16")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.25.16)
+summary(decideTestsDGE(lrt.25.16, p=0.05))
+lrt.25.25 <- glmLRT(dge.nolow.1.fit,coef=c("genotype25:time25")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.25.25)
+summary(decideTestsDGE(lrt.25.25, p=0.05))
+lrt.25.49 <- glmLRT(dge.nolow.1.fit,coef=c("genotype25:time49")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.25.49)
+summary(decideTestsDGE(lrt.25.49, p=0.05))
+
+lrt.26.4 <- glmLRT(dge.nolow.1.fit,coef=c("genotype26:time4")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.26.4)
+summary(decideTestsDGE(lrt.26.4, p=0.05))
+
+lrt.26.16 <- glmLRT(dge.nolow.1.fit,coef=c("genotype26:time16")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.26.16)
+summary(decideTestsDGE(lrt.26.16, p=0.05))
+lrt.26.25 <- glmLRT(dge.nolow.1.fit,coef=c("genotype26:time25")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.26.25)
+summary(decideTestsDGE(lrt.26.25, p=0.05))
+lrt.26.49 <- glmLRT(dge.nolow.1.fit,coef=c("genotype26:time49")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.26.49)
+summary(decideTestsDGE(lrt.26.49, p=0.05))
+
+lrt.27.4 <- glmLRT(dge.nolow.1.fit,coef=c("genotype27:time4")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.27.4)
+summary(decideTestsDGE(lrt.27.4, p=0.05))
+
+lrt.27.16 <- glmLRT(dge.nolow.1.fit,coef=c("genotype27:time16")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.27.16)
+summary(decideTestsDGE(lrt.27.16, p=0.05))
+lrt.27.25 <- glmLRT(dge.nolow.1.fit,coef=c("genotype27:time25")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.27.25)
+summary(decideTestsDGE(lrt.27.25, p=0.05))
+lrt.27.49 <- glmLRT(dge.nolow.1.fit,coef=c("genotype27:time49")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.27.49)
+summary(decideTestsDGE(lrt.27.49, p=0.05))
+
+DEGs_number_between_gt_time <- data.frame ("genotpe20.4" = as.data.frame(summary(decideTestsDGE(lrt.20.4, p=0.05)))$Freq,
+                                     "genotpe20.16" = as.data.frame(summary(decideTestsDGE(lrt.20.16, p=0.05)))$Freq, "genotpe20.25" = as.data.frame(summary(decideTestsDGE(lrt.20.25, p=0.05)))$Freq,
+                                     "genotpe20.49" = as.data.frame(summary(decideTestsDGE(lrt.20.49, p=0.05)))$Freq,
+                                     "genotpe21.4" = as.data.frame(summary(decideTestsDGE(lrt.21.4, p=0.05)))$Freq,
+                                     "genotpe21.16" = as.data.frame(summary(decideTestsDGE(lrt.21.16, p=0.05)))$Freq,
+                                     "genotpe21.25" = as.data.frame(summary(decideTestsDGE(lrt.21.25, p=0.05)))$Freq,"genotpe21.49" = as.data.frame(summary(decideTestsDGE(lrt.21.49, p=0.05)))$Freq,
+                                     "genotpe22.4" = as.data.frame(summary(decideTestsDGE(lrt.22.4, p=0.05)))$Freq, "genotpe22.16" = as.data.frame(summary(decideTestsDGE(lrt.22.16, p=0.05)))$Freq,
+                                     "genotpe22.25" = as.data.frame(summary(decideTestsDGE(lrt.22.25, p=0.05)))$Freq,"genotpe22.49" = as.data.frame(summary(decideTestsDGE(lrt.22.49, p=0.05)))$Freq,
+                                     "genotpe24.4" = as.data.frame(summary(decideTestsDGE(lrt.24.4, p=0.05)))$Freq, "genotpe24.16" = as.data.frame(summary(decideTestsDGE(lrt.24.16, p=0.05)))$Freq,
+                                     "genotpe24.25" = as.data.frame(summary(decideTestsDGE(lrt.24.25, p=0.05)))$Freq,"genotpe24.49" = as.data.frame(summary(decideTestsDGE(lrt.24.49, p=0.05)))$Freq,
+                                     "genotpe25.4" = as.data.frame(summary(decideTestsDGE(lrt.25.4, p=0.05)))$Freq, "genotpe25.16" = as.data.frame(summary(decideTestsDGE(lrt.25.16, p=0.05)))$Freq,
+                                     "genotpe25.25" = as.data.frame(summary(decideTestsDGE(lrt.25.25, p=0.05)))$Freq,"genotpe25.49" = as.data.frame(summary(decideTestsDGE(lrt.25.49, p=0.05)))$Freq,
+                                     "genotpe26.4" = as.data.frame(summary(decideTestsDGE(lrt.26.4, p=0.05)))$Freq, "genotpe26.16" = as.data.frame(summary(decideTestsDGE(lrt.26.16, p=0.05)))$Freq,
+                                     "genotpe26.25" = as.data.frame(summary(decideTestsDGE(lrt.26.25, p=0.05)))$Freq,"genotpe26.49" = as.data.frame(summary(decideTestsDGE(lrt.26.49, p=0.05)))$Freq,
+                                     "genotpe27.4" = as.data.frame(summary(decideTestsDGE(lrt.27.4, p=0.05)))$Freq, "genotpe27.16" = as.data.frame(summary(decideTestsDGE(lrt.27.16, p=0.05)))$Freq,
+                                     "genotpe27.25" = as.data.frame(summary(decideTestsDGE(lrt.27.25, p=0.05)))$Freq, "genotpe27.49" = as.data.frame(summary(decideTestsDGE(lrt.27.49, p=0.05)))$Freq)
+
+DEGs_number_between_gt_time
+
+rownames(DEGs_number_between_gt_time) <- c("down", "no", "up")
+DEGs_number_between_gt_time <- DEGs_number_between_gt_time[c("down", "up"),]
+DEGs_number_between_gt_time
+
+```
+
+```{r}
+library(reshape2)
+DEGs_number_between_gt_time.melt <- melt(DEGs_number_between_gt_time)
+DEGs_number_between_gt_time.melt$DE <- rep(c("down", "up"), 28)
+
+colnames(DEGs_number_between_gt_time.melt) <- c("genotype", "number", "DE")
+DEGs_number_between_gt_time.melt
+
+# reorder: up 1st down 2nd 
+DEGs_number_between_gt_time.melt$DE <- factor(DEGs_number_between_gt_time.melt$DE, levels = c("up", "down"))
+
+# reorder: up 1st down 2nd 
+DEGs_number_between_gt_time.melt$DE <- factor(DEGs_number_between_gt_time.melt$DE, levels = c("up", "down"))
+
+DEGs_number_between_gt_time.melt <- DEGs_number_between_gt_time.melt[order(DEGs_number_between_gt_time.melt$DE),]
+DEGs_number_between_gt_time.melt
+
+### making ggplot for DEGs
+library(ggplot2)
+p.DEGs_number_between_gt_time <- ggplot(data = DEGs_number_between_gt_time.melt)
+p.DEGs_number_between_gt_time <- p.DEGs_number_between_gt_time + geom_bar(mapping = aes(fill=DE, x = factor(DE), y = number), stat = "identity")
+ 
+p.DEGs_number_between_gt_time <- p.DEGs_number_between_gt_time + labs(y = "number of differentially expressed genes", x = "")
+p.DEGs_number_between_gt_time
+
+ggsave(p.DEGs_number_between_gt_time, filename = "~/Desktop/p.DEGs_number_between_gt_time.png", height = 6, width = 25)
+```
+```{r}
+# filter based on read count: eliminating low expressed genes in dge.nolow.1
+#In this case we will retain genes with > 10 reads in >= 3 samples
+ 
+##dge.nolow.1 <-dge.nolow.1[rowSums(dge.nolow.1$counts > 10) >= 3,]
+
+#when we want to chang the ref from firt genotype to other genotype(chang from 20 to 23)
+samples.nolow.1$genotype <- as.factor(samples.nolow.1$genotype)
+samples.nolow.1$trt <- as.factor(samples.nolow.1$trt)
+samples.nolow.1$genotype <- relevel(samples.nolow.1$genotype,ref="23")
+samples.nolow.1$trt <- relevel(samples.nolow.1$trt,ref="H")
+
+#design other model for multifactor interaction (3 factors)
+design3.nolow.1 <- model.matrix(~genotype*trt*time + batch , data=samples.nolow.1)
+colnames(design3.nolow.1)
+#First the overall dispersion
+
+dge.nolow.1 <- estimateGLMCommonDisp(dge.nolow.1, design3.nolow.1, verbose = T)##Disp = 0.04007 , BCV = 0.2002##
+dge.nolow.1 <- estimateGLMTrendedDisp(dge.nolow.1, design3.nolow.1)
+dge.nolow.1 <- estimateGLMTagwiseDisp(dge.nolow.1, design3.nolow.1)
+plotBCV(dge.nolow.1)
+mds.dge.nolow.1 <- plotMDS(dge.nolow.1, method = "bcv",labels = dge.nolow.1$samples$group)
+
+dge.nolow.1.fit <- glmFit(dge.nolow.1, design3.nolow.1)
+colnames(dge.nolow.1.fit)
+# this function find out genes that have gt:time effect in any genotypes (genotype 23 as reference level)
+dge.nolow.1.lrt <- glmLRT(dge.nolow.1.fit,coef=c("genotype20:trtL:time4","genotype20:trtL:time16","genotype20:trtL:time25","genotype20:trtL:time49","genotype21:trtL:time4","genotype21:trtL:time16","genotype21:trtL:time25","genotype21:trtL:time49","genotype22:trtL:time4","genotype22:trtL:time16","genotype22:trtL:time25","genotype22:trtL:time49","genotype24:trtL:time4","genotype24:trtL:time16","genotype24:trtL:time25","genotype24:trtL:time49","genotype25:trtL:time4","genotype25:trtL:time16","genotype25:trtL:time25","genotype25:trtL:time49","genotype26:trtL:time4","genotype26:trtL:time16","genotype26:trtL:time25", "genotype26:trtL:time49", "genotype27:trtL:time4", "genotype27:trtL:time16","genotype27:trtL:time25","genotype27:trtL:time49"))
+#I want to know differential expressed genes, I think these genes are better for interpreting as expression pattern
+topTags(dge.nolow.1.lrt)
+###### get genes significant for three way interaction
+DEgene.3.interaction <- topTags(dge.nolow.1.lrt,n = Inf)$table[topTags(dge.nolow.1.lrt,n = Inf)$table$FDR<0.05,]
+dim(DEgene.3.interaction)
+colnames(DEgene.3.interaction)
+head(DEgene.3.interaction)
+
+
+
+
+lrt.20.L.4 <- glmLRT(dge.nolow.1.fit,coef=c("genotype20:trtL:time4")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.20.L.4)
+summary(decideTestsDGE(lrt.20.L.4, p=0.05))
+
+lrt.20.L.16 <- glmLRT(dge.nolow.1.fit,coef=c("genotype20:trtL:time16")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.20.L.16)
+summary(decideTestsDGE(lrt.20.L.16, p=0.05))
+lrt.20.L.25 <- glmLRT(dge.nolow.1.fit,coef=c("genotype20:trtL:time25")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.20.L.25)
+summary(decideTestsDGE(lrt.20.L.25, p=0.05))
+lrt.20.L.49 <- glmLRT(dge.nolow.1.fit,coef=c("genotype20:trtL:time49")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.20.L.49)
+summary(decideTestsDGE(lrt.20.L.49, p=0.05))
+
+lrt.21.L.4 <- glmLRT(dge.nolow.1.fit,coef=c("genotype21:trtL:time4")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.21.L.4)
+summary(decideTestsDGE(lrt.21.L.4, p=0.05))
+
+lrt.21.L.16 <- glmLRT(dge.nolow.1.fit,coef=c("genotype21:trtL:time16")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.21.L.16)
+summary(decideTestsDGE(lrt.21.L.16, p=0.05))
+lrt.21.L.25 <- glmLRT(dge.nolow.1.fit,coef=c("genotype21:trtL:time25")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.21.L.25)
+summary(decideTestsDGE(lrt.21.L.25, p=0.05))
+lrt.21.L.49 <- glmLRT(dge.nolow.1.fit,coef=c("genotype21:trtL:time49")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.21.L.49)
+summary(decideTestsDGE(lrt.21.L.49, p=0.05))
+
+lrt.22.L.4 <- glmLRT(dge.nolow.1.fit,coef=c("genotype22:trtL:time4")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.22.L.4)
+summary(decideTestsDGE(lrt.22.L.4, p=0.05))
+
+lrt.22.L.16 <- glmLRT(dge.nolow.1.fit,coef=c("genotype22:trtL:time16")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.22.L.16)
+summary(decideTestsDGE(lrt.22.L.16, p=0.05))
+lrt.22.L.25 <- glmLRT(dge.nolow.1.fit,coef=c("genotype22:trtL:time25")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.22.L.25)
+summary(decideTestsDGE(lrt.22.L.25, p=0.05))
+lrt.22.L.49 <- glmLRT(dge.nolow.1.fit,coef=c("genotype22:trtL:time49")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.22.L.49)
+summary(decideTestsDGE(lrt.22.L.49, p=0.05))
+
+lrt.24.L.4 <- glmLRT(dge.nolow.1.fit,coef=c("genotype24:trtL:time4")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.24.L.4)
+summary(decideTestsDGE(lrt.24.L.4, p=0.05))
+
+lrt.24.L.16 <- glmLRT(dge.nolow.1.fit,coef=c("genotype24:trtL:time16")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.24.L.16)
+summary(decideTestsDGE(lrt.24.L.16, p=0.05))
+lrt.24.L.25 <- glmLRT(dge.nolow.1.fit,coef=c("genotype24:trtL:time25")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.24.L.25)
+summary(decideTestsDGE(lrt.24.L.25, p=0.05))
+lrt.24.L.49 <- glmLRT(dge.nolow.1.fit,coef=c("genotype24:trtL:time49")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.24.L.49)
+summary(decideTestsDGE(lrt.24.L.49, p=0.05))
+ 
+lrt.25.L.4 <- glmLRT(dge.nolow.1.fit,coef=c("genotype25:trtL:time4")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.25.L.4)
+summary(decideTestsDGE(lrt.25.L.4, p=0.05))
+
+lrt.25.L.16 <- glmLRT(dge.nolow.1.fit,coef=c("genotype25:trtL:time16")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.25.L.16)
+summary(decideTestsDGE(lrt.25.L.16, p=0.05))
+lrt.25.L.25 <- glmLRT(dge.nolow.1.fit,coef=c("genotype25:trtL:time25")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.25.L.25)
+summary(decideTestsDGE(lrt.25.L.25, p=0.05))
+lrt.25.L.49 <- glmLRT(dge.nolow.1.fit,coef=c("genotype25:trtL:time49")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.25.L.49)
+summary(decideTestsDGE(lrt.25.L.49, p=0.05))
+
+lrt.26.L.4 <- glmLRT(dge.nolow.1.fit,coef=c("genotype26:trtL:time4")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.26.L.4)
+summary(decideTestsDGE(lrt.26.L.4, p=0.05))
+
+lrt.26.L.16 <- glmLRT(dge.nolow.1.fit,coef=c("genotype26:trtL:time16")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.26.L.16)
+summary(decideTestsDGE(lrt.26.L.16, p=0.05))
+lrt.26.L.25 <- glmLRT(dge.nolow.1.fit,coef=c("genotype26:trtL:time25")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.26.L.25)
+summary(decideTestsDGE(lrt.26.L.25, p=0.05))
+lrt.26.L.49 <- glmLRT(dge.nolow.1.fit,coef=c("genotype26:trtL:time49")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.26.L.49)
+summary(decideTestsDGE(lrt.26.L.49, p=0.05))
+
+lrt.27.L.4 <- glmLRT(dge.nolow.1.fit,coef=c("genotype27:trtL:time4")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.27.L.4)
+summary(decideTestsDGE(lrt.27.L.4, p=0.05))
+
+lrt.27.L.16 <- glmLRT(dge.nolow.1.fit,coef=c("genotype27:trtL:time16")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.27.L.16)
+summary(decideTestsDGE(lrt.27.L.16, p=0.05))
+lrt.27.L.25 <- glmLRT(dge.nolow.1.fit,coef=c("genotype27:trtL:time25")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.27.L.25)
+summary(decideTestsDGE(lrt.27.L.25, p=0.05))
+lrt.27.L.49 <- glmLRT(dge.nolow.1.fit,coef=c("genotype27:trtL:time49")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.27.L.49)
+summary(decideTestsDGE(lrt.27.L.49, p=0.05))
+###lrt.L.time4 <- glmLRT(dge.nolow.1.fit,coef=c("trtL:time4")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.L.time4)
+summary(decideTestsDGE(lrt.L.time4, p=0.05))
+lrt.L.time16 <- glmLRT(dge.nolow.1.fit,coef=c("trtL:time16")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.L.time16)
+summary(decideTestsDGE(lrt.L.time16, p=0.05))
+lrt.L.time25 <- glmLRT(dge.nolow.1.fit,coef=c("trtL:time25")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.L.time25)
+summary(decideTestsDGE(lrt.L.time25, p=0.05))
+lrt.L.time49 <- glmLRT(dge.nolow.1.fit,coef=c("trtL:time49")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.L.time49)
+summary(decideTestsDGE(lrt.L.time49, p=0.05))
+```
+```{r}
+DEGs_number_between_gt_trt_time <- data.frame ("20.L.4" = as.data.frame(summary(decideTestsDGE(lrt.20.L.4, p=0.05)))$Freq,
+                                     "20.L.16" = as.data.frame(summary(decideTestsDGE(lrt.20.L.16, p=0.05)))$Freq, "20.L.25" = as.data.frame(summary(decideTestsDGE(lrt.20.L.25, p=0.05)))$Freq,
+                                     "20.L.49" = as.data.frame(summary(decideTestsDGE(lrt.20.L.49, p=0.05)))$Freq,
+                                     "21.L.4" = as.data.frame(summary(decideTestsDGE(lrt.21.L.4, p=0.05)))$Freq,
+                                     "21.L.16" = as.data.frame(summary(decideTestsDGE(lrt.21.L.16, p=0.05)))$Freq,
+                                     "21.L.25" = as.data.frame(summary(decideTestsDGE(lrt.21.L.25, p=0.05)))$Freq,"21.L.49" = as.data.frame(summary(decideTestsDGE(lrt.21.L.49, p=0.05)))$Freq,
+                                     "22.L.4" = as.data.frame(summary(decideTestsDGE(lrt.22.L.4, p=0.05)))$Freq, "22.L.16" = as.data.frame(summary(decideTestsDGE(lrt.22.L.16, p=0.05)))$Freq,
+                                     "22.L.25" = as.data.frame(summary(decideTestsDGE(lrt.22.L.25, p=0.05)))$Freq,"22.L.49" = as.data.frame(summary(decideTestsDGE(lrt.22.L.49, p=0.05)))$Freq,
+                                     "24.L.4" = as.data.frame(summary(decideTestsDGE(lrt.24.L.4, p=0.05)))$Freq, "24.L.16" = as.data.frame(summary(decideTestsDGE(lrt.24.L.16, p=0.05)))$Freq,
+                                     "24.L.25" = as.data.frame(summary(decideTestsDGE(lrt.24.L.25, p=0.05)))$Freq,"24.L.49" = as.data.frame(summary(decideTestsDGE(lrt.24.L.49, p=0.05)))$Freq,
+                                     "25.L.4" = as.data.frame(summary(decideTestsDGE(lrt.25.L.4, p=0.05)))$Freq, "25.L.16" = as.data.frame(summary(decideTestsDGE(lrt.25.L.16, p=0.05)))$Freq,
+                                     "25.L.25" = as.data.frame(summary(decideTestsDGE(lrt.25.L.25, p=0.05)))$Freq,"25.L.49" = as.data.frame(summary(decideTestsDGE(lrt.25.L.49, p=0.05)))$Freq,
+                                     "26.L.4" = as.data.frame(summary(decideTestsDGE(lrt.26.L.4, p=0.05)))$Freq, "26.L.16" = as.data.frame(summary(decideTestsDGE(lrt.26.L.16, p=0.05)))$Freq,
+                                     "26.L.25" = as.data.frame(summary(decideTestsDGE(lrt.26.L.25, p=0.05)))$Freq,"26.L.49" = as.data.frame(summary(decideTestsDGE(lrt.26.L.49, p=0.05)))$Freq,
+                                     "27.L.4" = as.data.frame(summary(decideTestsDGE(lrt.27.L.4, p=0.05)))$Freq, "27.L.16" = as.data.frame(summary(decideTestsDGE(lrt.27.L.16, p=0.05)))$Freq,
+                                     "27.L.25" = as.data.frame(summary(decideTestsDGE(lrt.27.L.25, p=0.05)))$Freq, "27.L.49" = as.data.frame(summary(decideTestsDGE(lrt.27.L.49, p=0.05)))$Freq)
+
+DEGs_number_between_gt_trt_time
+
+rownames(DEGs_number_between_gt_trt_time) <- c("down", "no", "up")
+DEGs_number_between_gt_trt_time <- DEGs_number_between_gt_trt_time[c("down", "up"),]
+DEGs_number_between_gt_trt_time
+
+```
+```{r}
+library(reshape2)
+DEGs_number_between_gt_trt_time.melt <- melt(DEGs_number_between_gt_trt_time)
+DEGs_number_between_gt_trt_time.melt$DE <- rep(c("down", "up"), 28)
+
+colnames(DEGs_number_between_gt_trt_time.melt) <- c("genotype", "number", "DE")
+DEGs_number_between_gt_trt_time.melt
+
+# reorder: up 1st down 2nd 
+DEGs_number_between_gt_trt_time.melt$DE <- factor(DEGs_number_between_gt_trt_time.melt$DE, levels = c("up", "down"))
+
+
+DEGs_number_between_gt_trt_time.melt <- DEGs_number_between_gt_trt_time.melt[order(DEGs_number_between_gt_trt_time.melt$DE),]
+DEGs_number_between_gt_trt_time.melt
+
+# gsub("([[:digit:]]+)(\\.)(1|4|16|25|49)", "\\1", vstMat.nolow.1.log2response.melt$Var2)
+
+
+ggdata$labels$gt <- gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\2",ggdata$labels$label) 
+ggdata$labels$trt <- gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\3",ggdata$labels$label)
+vstMat.nolow.1.log2response.melt$time <- gsub("([[:digit:]]+)(\\.)([[:digit:]])", "\\3", vstMat.nolow.1.log2response.melt$Var2)
+head(DEGs_number_between_gt_trt_time.melt)
+
+DEGs_number_between_gt_trt_time.melt$gt <- gsub("(X)([[:digit:]]+)(\\.)(L)(\\.)(4|16|25|49)", "\\2",DEGs_number_between_gt_trt_time.melt$genotype)
+
+DEGs_number_between_gt_trt_time.melt$time <- gsub("(X)([[:digit:]]+)(\\.)(L)(\\.)(4|16|25|49)", "\\6",DEGs_number_between_gt_trt_time.melt$genotype)
+ 
+
+### making ggplot for DEGs
+library(ggplot2)
+p.DEGs_number_between_gt_trt_time <- ggplot(data = DEGs_number_between_gt_trt_time.melt)
+p.DEGs_number_between_gt_trt_time <- p.DEGs_number_between_gt_trt_time + geom_bar(mapping = aes(fill=DE, x = factor(DE), y = number) , stat= "identity")
+#p.DEGs_number_between_gt_trt_time <- p.DEGs_number_between_gt_trt_time + facet_grid(~time) 
+p.DEGs_number_between_gt_trt_time <- p.DEGs_number_between_gt_trt_time + labs(y = "number of differentially expressed genes", x = "")
+p.DEGs_number_between_gt_trt_time
+```{r}
+factor(DE)
+number
+identity
+```
+
+```
+
+ggsave(p.DEGs_number_between_gt_trt_time, filename = "~/Desktop/p.DEGs_number_between_gt_trt_time.png", height = 6, width = 40)
+
+
+#design a model for 2 factors interaction (gt*time)
+
+DEGs_number_between_gt_time <- data.frame ("genotpe20.4" = as.data.frame(summary(decideTestsDGE(lrt.20.4, p=0.05)))$Freq,
+                                     "genotpe20.16" = as.data.frame(summary(decideTestsDGE(lrt.20.16, p=0.05)))$Freq, "genotpe20.25" = as.data.frame(summary(decideTestsDGE(lrt.20.25, p=0.05)))$Freq,
+                                     "genotpe20.49" = as.data.frame(summary(decideTestsDGE(lrt.20.49, p=0.05)))$Freq,
+                                     "genotpe21.4" = as.data.frame(summary(decideTestsDGE(lrt.21.4, p=0.05)))$Freq,
+                                     "genotpe21.16" = as.data.frame(summary(decideTestsDGE(lrt.21.16, p=0.05)))$Freq,
+                                     "genotpe21.25" = as.data.frame(summary(decideTestsDGE(lrt.21.25, p=0.05)))$Freq,"genotpe21.49" = as.data.frame(summary(decideTestsDGE(lrt.21.49, p=0.05)))$Freq,
+                                     "genotpe22.4" = as.data.frame(summary(decideTestsDGE(lrt.22.4, p=0.05)))$Freq, "genotpe22.16" = as.data.frame(summary(decideTestsDGE(lrt.22.16, p=0.05)))$Freq,
+                                     "genotpe22.25" = as.data.frame(summary(decideTestsDGE(lrt.22.25, p=0.05)))$Freq,"genotpe22.49" = as.data.frame(summary(decideTestsDGE(lrt.22.49, p=0.05)))$Freq,
+                                     "genotpe24.4" = as.data.frame(summary(decideTestsDGE(lrt.24.4, p=0.05)))$Freq, "genotpe24.16" = as.data.frame(summary(decideTestsDGE(lrt.24.16, p=0.05)))$Freq,
+                                     "genotpe24.25" = as.data.frame(summary(decideTestsDGE(lrt.24.25, p=0.05)))$Freq,"genotpe24.49" = as.data.frame(summary(decideTestsDGE(lrt.24.49, p=0.05)))$Freq,
+                                     "genotpe25.4" = as.data.frame(summary(decideTestsDGE(lrt.25.4, p=0.05)))$Freq, "genotpe25.16" = as.data.frame(summary(decideTestsDGE(lrt.25.16, p=0.05)))$Freq,
+                                     "genotpe25.25" = as.data.frame(summary(decideTestsDGE(lrt.25.25, p=0.05)))$Freq,"genotpe25.49" = as.data.frame(summary(decideTestsDGE(lrt.25.49, p=0.05)))$Freq,
+                                     "genotpe26.4" = as.data.frame(summary(decideTestsDGE(lrt.26.4, p=0.05)))$Freq, "genotpe26.16" = as.data.frame(summary(decideTestsDGE(lrt.26.16, p=0.05)))$Freq,
+                                     "genotpe26.25" = as.data.frame(summary(decideTestsDGE(lrt.26.25, p=0.05)))$Freq,"genotpe26.49" = as.data.frame(summary(decideTestsDGE(lrt.26.49, p=0.05)))$Freq,
+                                     "genotpe27.4" = as.data.frame(summary(decideTestsDGE(lrt.27.4, p=0.05)))$Freq, "genotpe27.16" = as.data.frame(summary(decideTestsDGE(lrt.20.16, p=0.05)))$Freq,
+                                     "genotpe27.25" = as.data.frame(summary(decideTestsDGE(lrt.20.25, p=0.05)))$Freq, "genotpe27.49" = as.data.frame(summary(decideTestsDGE(lrt.20.49, p=0.05)))$Freq)
+
+DEGs_number_between_gt_time
+
+rownames(DEGs_number_between_gt_time) <- c("down", "no", "up")
+DEGs_number_between_gt_time <- DEGs_number_between_gt_time[c("down", "up"),]
+DEGs_number_between_gt_time
+
+```
+
+```{r}
+library(reshape2)
+DEGs_number_between_gt_time.melt <- melt(DEGs_number_between_gt_time)
+DEGs_number_between_gt_time.melt$DE <- rep(c("down", "up"), 28)
+
+colnames(DEGs_number_between_gt_time.melt) <- c("genotype", "number", "DE")
+DEGs_number_between_gt_time.melt
+
+# reorder: up 1st down 2nd 
+DEGs_number_between_gt_time.melt$DE <- factor(DEGs_number_between_gt_time.melt$DE, levels = c("up", "down"))
+
+# reorder: up 1st down 2nd 
+DEGs_number_between_gt_time.melt$DE <- factor(DEGs_number_between_gt_time.melt$DE, levels = c("up", "down"))
+
+DEGs_number_between_gt_time.melt <- DEGs_number_between_gt_time.melt[order(DEGs_number_between_gt_time.melt$DE),]
+DEGs_number_between_gt_time.melt
+
+### making ggplot for DEGs
+library(ggplot2)
+p.DEGs_number_between_gt_time <- ggplot(data = DEGs_number_between_gt_time.melt)
+p.DEGs_number_between_gt_time <- p.DEGs_number_between_gt_time + geom_bar(mapping = aes(fill=DE, x = factor(DE), y = number), stat = "identity")
+p.DEGs_number_between_gt_time <- p.DEGs_number_between_gt_time + facet_grid(~genotype) 
+p.DEGs_number_between_gt_time <- p.DEGs_number_between_gt_time + labs(y = "number of differentially expressed genes", x = "")
+p.DEGs_number_between_gt_time
+
+ggsave(p.DEGs_number_between_gt_time, filename = "~/Desktop/p.DEGs_number_between_gt_time.png", height = 6, width = 25)
+```
+
+####
+dge.nolow.1 <- estimateGLMTrendedDisp(dge.nolow.1,design.nolow.1)
+dge.nolow.1 <- estimateGLMTagwiseDisp(dge.nolow.1, design.nolow.1)
+#par(mfrow=c(1,2))
+plotBCV(dge.nolow.1)
+# MDS to check sample seperation, also using dengrogram.  
+# plotMDS(dge.data.F1, method = "bcv",labels = rownames(dge.data.F1$samples))
+
+mds.dge.nolow.1 <- plotMDS(dge.nolow.1, method = "bcv",labels = dge.nolow.1$samples$group)
+
+x.mds.dge.nolow.1 <- as.data.frame(mds.dge.nolow.1$x)
+y.mds.dge.nolow.1 <- as.data.frame(mds.dge.nolow.1$y)
+distance_matrix.mds.dge.nolow.1 <- merge(x.mds.dge.nolow.1, y.mds.dge.nolow.1, by="row.names")
+distance_matrix.mds.dge.nolow.1$group <- gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\2\\3",distance_matrix.mds.dge.nolow.1$Row.names)
+distance_matrix.mds.dge.nolow.1$genotype <- gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\2",distance_matrix.mds.dge.nolow.1$Row.names)
+
+distance_matrix.mds.dge.nolow.1$trt <- gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\3",distance_matrix.mds.dge.nolow.1$Row.names)
+
+colnames(distance_matrix.mds.dge.nolow.1) <- c("lib","x","y","group","genotype","trt")
+head(distance_matrix.mds.dge.nolow.1)
+# making color MDS figure
+library(ggplot2)
+p <- ggplot(data = distance_matrix.mds.dge.nolow.1)
+p <- p + geom_point(aes(x, y, color=factor(genotype), shape=factor(trt)), size=3) 
+p <- p + labs(y = "BCV distance 2", x="BCV distance 1")
+#p <- p + facet_grid(~genotype)
+p
+```
+
+```{r}
+design.nolow.1 <- model.matrix(~genotype*trt + batch , data=samples.nolow.1)
+colnames(design3.nolow.1)
+dge.nolow.1.fit <- glmFit(dge.nolow.1, design.nolow.1)
+colnames(dge.nolow.1.fit$design)
+                                  
+# this function find out genes that have gt:trt effect in any genotypes (genotype 23 as reference level)
+dge.nolow.1.lrt <- glmLRT(dge.nolow.1.fit,coef=c("genotype20:trtL","genotype21:trtL", "genotype22:trtL","genotype24:trtL","genotype25:trtL","genotype26:trtL", "genotype27:trtL"))
+
+#lrt.20 <- glmLRT(fit,coef = "genotype20:trtL") for one sample (compare genotype 20 with 20 as standard and trtL with trtH)
+
+lrt.20 <- glmLRT(dge.nolow.1.fit,coef=c("genotype20:trtL")) 
+colnames(dge.nolow.1.fit)
+topTags(lrt.20)
+summary(decideTestsDGE(lrt.20, p=0.05))
+
+lrt.21 <- glmLRT(dge.nolow.1.fit,coef=c("genotype21:trtL"))
+colnames(dge.nolow.1.fit)
+topTags(lrt.21)
+summary(decideTestsDGE(lrt.21, p=0.05))
+
+lrt.22 <- glmLRT(dge.nolow.1.fit,coef=c("genotype22:trtL"))
+colnames(dge.nolow.1.fit)
+topTags(lrt.22)
+summary(decideTestsDGE(lrt.22, p=0.05))
+
+lrt.24 <-glmLRT(dge.nolow.1.fit,coef=c("genotype24:trtL"))
+colnames(dge.nolow.1.fit)
+topTags(lrt.24)
+summary(decideTestsDGE(lrt.24, p=0.05))
+
+lrt.25 <- glmLRT(dge.nolow.1.fit,coef=c("genotype25:trtL"))
+colnames(dge.nolow.1.fit)
+topTags(lrt.25)
+summary(decideTestsDGE(lrt.25, p=0.05))
+
+lrt.26 <- glmLRT(dge.nolow.1.fit,coef=c("genotype26:trtL"))
+colnames(dge.nolow.1.fit)
+topTags(lrt.26)
+summary(decideTestsDGE(lrt.26, p=0.05))
+
+lrt.27 <- glmLRT(dge.nolow.1.fit,coef=c("genotype27:trtL"))
+colnames(dge.nolow.1.fit)
+topTags(lrt.27)
+summary(decideTestsDGE(lrt.27, p=0.05))
+```
+
+
+```{r}
+### ggplot 
+### reformat for ggplot barplot 
+DEGs_number_between_gt <- data.frame("genotpe20" = as.data.frame(summary(decideTestsDGE(lrt.20, p=0.05)))$Freq,
+                                     "genotpe21" = as.data.frame(summary(decideTestsDGE(lrt.21, p=0.05)))$Freq, "genotpe22" = as.data.frame(summary(decideTestsDGE(lrt.22, p=0.05)))$Freq,
+                                     "genotpe24" = as.data.frame(summary(decideTestsDGE(lrt.24, p=0.05)))$Freq,
+                                     "genotpe25" = as.data.frame(summary(decideTestsDGE(lrt.25, p=0.05)))$Freq,
+                                     "genotpe26" = as.data.frame(summary(decideTestsDGE(lrt.26, p=0.05)))$Freq,
+                                     "genotpe27" = as.data.frame(summary(decideTestsDGE(lrt.27, p=0.05)))$Freq)
+
+DEGs_number_between_gt
+
+rownames(DEGs_number_between_gt) <- c("down", "no", "up")
+DEGs_number_between_gt <- DEGs_number_between_gt[c("down", "up"),]
+DEGs_number_between_gt
+
+```
+
+```{r}
+library(reshape2)
+DEGs_number_between_gt.melt <- melt(DEGs_number_between_gt)
+DEGs_number_between_gt.melt$DE <- rep(c("down", "up"), 7)
+
+colnames(DEGs_number_between_gt.melt) <- c("genotype", "number", "DE")
+DEGs_number_between_gt.melt
+
+# reorder: up 1st down 2nd 
+DEGs_number_between_gt.melt$DE <- factor(DEGs_number_between_gt.melt$DE, levels = c("up", "down"))
+
+# reorder: up 1st down 2nd 
+DEGs_number_between_gt.melt$DE <- factor(DEGs_number_between_gt.melt$DE, levels = c("up", "down"))
+
+DEGs_number_between_gt.melt <- DEGs_number_between_gt.melt[order(DEGs_number_between_gt.melt$DE),]
+DEGs_number_between_gt.melt
+
+### making ggplot for DEGs
+library(ggplot2)
+p.DEGs_number_between_gt <- ggplot(data = DEGs_number_between_gt.melt)
+p.DEGs_number_between_gt <- p.DEGs_number_between_gt + geom_bar(mapping = aes(fill=DE, x = factor(DE), y = number), stat = "identity")
+p.DEGs_number_between_gt <- p.DEGs_number_between_gt + facet_grid(~genotype)
+p.DEGs_number_between_gt <- p.DEGs_number_between_gt + labs(y = "number of differentially expressed genes", x = "")
+p.DEGs_number_between_gt
+
+```
+```{r}
+# voom transformation 
+source("https://bioconductor.org/biocLite.R")
+biocLite("DESeq")
+library(DESeq2)
+dds.dge.nolow.1 <- DESeqDataSetFromMatrix(countData = round(counts.nolow.1), colData = samples.nolow.1, design = ~genotype*trt + batch)
+vsd.dge.nolow.1<- varianceStabilizingTransformation(dds.dge.nolow.1)
+vstMat.dge.nolow.1 <- assay(vsd.dge.nolow.1)
+colnames(vstMat.dge.nolow.1) <- colnames(counts.nolow.1)
+```
+```{r}
+# clustering to check sample seperation 
+#install.packages("ggdendro")
+library(ggdendro)
+#install.packages("pvclust")
+library(pvclust)
+
+hc.mds.dge.nolow.1 <- hclust(dist(t(vstMat.dge.nolow.1[1:1000,])))
+plot(hc.mds.dge.nolow.1)
+rect.hclust(hc.mds.dge.nolow.1, k = 4, border = "red")
+
+ggdata <- dendro_data(as.dendrogram(hc.mds.dge.nolow.1))
+ggdata$labels$gt <- gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\2",ggdata$labels$label) 
+ggdata$labels$trt <- gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\3",ggdata$labels$label)
+
+ggdata$labels$group <- paste(ggdata$labels$gt, ggdata$labels$trt, sep = "_")
+ggdata$labels
+# start ggplot here 
+library(ggplot2)
+p2 <- ggplot(data = segment(ggdata))
+p2 <- p2 + geom_segment(aes(x=x, y=y, xend=xend, yend=yend)) + theme_dendro()
+p2 <- p2 + geom_text(data = label(ggdata), aes(x = x, y = y, label = label, hjust=0, color=group)) + coord_flip() + scale_y_reverse(expand=c(0.2, 0))
+p2
+ggsave("/Users/hajaramini/Desktop/clustering.png", width = 13, height = 25)
+
+```
+
+
+```{r}
+####use heatmap2 function
+library(gplots)
+heatmap.2(vstMat.dge.nolow.1, Rowv=as.dendrogram(hc.mds.dge.nolow.1), scale="row", density.info="none",trace = "none", width =20 ,height= 25)
+```
+
+
+```{r}
+head(counts.nolow.1)
+counts.nolow.1[is.na(counts.nolow.1)]<-0
+dds.nolow.1 <- DESeqDataSetFromMatrix(countData = round(counts.nolow.1), colData = samples.nolow.1, design = ~ batch + genotype*trt*time)
+
+vsd.nolow.1 <- varianceStabilizingTransformation(dds.nolow.1)
+
+vstMat.nolow.1 <- assay(vsd.nolow.1)
+head(vstMat.nolow.1)
+dim(vstMat.nolow.1)
+# 1) trasform your dataset from wide to long format
+library(reshape2)
+vstMat.nolow.1.melt <- melt(vstMat.nolow.1)
+head(vstMat.nolow.1.melt)
+tail(vstMat.nolow.1.melt)
+dim(vstMat.nolow.1.melt) # something wrong? 
+
+# 2) get description for each factor of your VST normalized read count
+# vstMat.nolow.1.melt$genotype <- 
+vstMat.nolow.1.melt$genotype<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\2",vstMat.nolow.1.melt$Var2))
+# vstMat.nolow.1.melt$trt <- 
+vstMat.nolow.1.melt$trt<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\3",vstMat.nolow.1.melt$Var2))
+# vstMat.nolow.1.melt$time <- 
+vstMat.nolow.1.melt$time<-factor(gsub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\4",vstMat.nolow.1.melt$Var2))
+
+# 3) get the mean across biological replicate
+# vstMat.nolow.1.melt$mean <- (I will add you to my bitbuckt repo)
+vstMat.nolow.1.melt.mean<-as.data.frame(tapply(vstMat.nolow.1.melt$value,list(vstMat.nolow.1.melt$Var1,vstMat.nolow.1.melt$genotype,vstMat.nolow.1.melt$trt,vstMat.nolow.1.melt$time),mean)) # is it OK to use transformed one? ### in this way, we get the mean expression values from 3 biological reps for each condition ???
+save(vstMat.nolow.1.melt.mean, file = "vstMat.nolow.1.melt.mean.Rdata")
+head(vstMat.nolow.1.melt.mean) 
+# 4) calculate the fold change 
+vstMat.nolow.1.log2response<-as.data.frame(vstMat.nolow.1.melt.mean[,grep("L",colnames(vstMat.nolow.1.melt.mean))] - vstMat.nolow.1.melt.mean[,grep("H",colnames(vstMat.nolow.1.melt.mean))]) # shade/sun (this is log2 fold change)
+vstMat.nolow.1.log2response<-sapply(vstMat.nolow.1.log2response,as.numeric) # as numeric
+###correct
+rownames(vstMat.nolow.1.log2response) <- rownames(vstMat.nolow.1.melt.mean)
+head(vstMat.nolow.1.log2response)
+colnames(vstMat.nolow.1.log2response) <- sub(".L","",colnames(vstMat.nolow.1.log2response)) # remove "L" from col names (042716, Kazu)
+save(vstMat.nolow.1.log2response,file="~/Desktop/vstMat.nolow.1.Rdata.log2response.Rdata")
+####
+head(vstMat.nolow.1.log2response)
+vstMat.nolow.1.log2response.melt <- melt(vstMat.nolow.1.log2response)
+head(vstMat.nolow.1.log2response.melt)
+###correct
+colnames(vstMat.nolow.1.log2response)
+
+vstMat.nolow.1.log2response.melt <- melt(vstMat.nolow.1.log2response)
+head(vstMat.nolow.1.log2response.melt)
+class(vstMat.nolow.1.log2response.melt$Var2)
+vstMat.nolow.1.log2response.melt
+
+vstMat.nolow.1.log2response.melt$Var2 <-rownames(vstMat.nolow.1.melt.mean(vstMat.nolow.1.log2response.melt$Var2)) 
+                                                                                    
+unique(vstMat.nolow.1.log2response.melt$Var2)
+#(sub("(C|D|E)([[:digit:]]+)(L|H)(1|4|16|25|49)A","\\1",colnames(counts)))
+vstMat.nolow.1.log2response.melt$gt <- gsub("([[:digit:]]+)(\\.)(1|4|16|25|49)", "\\1", vstMat.nolow.1.log2response.melt$Var2)
+
+
+
+vstMat.nolow.1.log2response.melt$time <- gsub("([[:digit:]]+)(\\.)([[:digit:]])", "\\3", vstMat.nolow.1.log2response.melt$Var2)
+#for all 10 DE genes in 3 factors interaction
+test1 <- vstMat.nolow.1.log2response.melt[vstMat.nolow.1.log2response.melt$Var1== c("AT3G24070.1" ,"AT3G47250.1","AT3G47290.1","AT1G27540.1","AT1G35115.1","AT3G42052.1","AT2G14460.1","AT4G15130.1","AT2G14285.1","AT3G16750.1"),]
+#just for one gene
+test <- vstMat.nolow.1.log2response.melt[vstMat.nolow.1.log2response.melt$Var1=="AT1G50920.1",]
+#for AT3G24070.1 gene
+test2 <- vstMat.nolow.1.log2response.melt[vstMat.nolow.1.log2response.melt$Var1=="AT3G24070.1",]
+#for "AT3G47250.1 gene
+test3 <- vstMat.nolow.1.log2response.melt[vstMat.nolow.1.log2response.melt$Var1=="AT3G47250.1",]
+#for AT1G27540.1 gene
+test4 <- vstMat.nolow.1.log2response.melt[vstMat.nolow.1.log2response.melt$Var1=="AT1G27540.1",]
+# for AT1G35115.1 gene
+test5 <- vstMat.nolow.1.log2response.melt[vstMat.nolow.1.log2response.melt$Var1=="AT1G35115.1",]
+#for AT3G42052. gene
+test6 <- vstMat.nolow.1.log2response.melt[vstMat.nolow.1.log2response.melt$Var1=="AT3G42052.",]
+#for AT2G14460.1 gene
+test7 <- vstMat.nolow.1.log2response.melt[vstMat.nolow.1.log2response.melt$Var1=="AT2G14460.1",]
+#for AT4G15130.1 gene
+test8 <- vstMat.nolow.1.log2response.melt[vstMat.nolow.1.log2response.melt$Var1=="AT4G15130.1",]
+#for AT2G14285.1 gene
+test9 <- vstMat.nolow.1.log2response.melt[vstMat.nolow.1.log2response.melt$Var1=="AT2G14285.1",]
+#for AT3G16750.1 gene
+test10 <- vstMat.nolow.1.log2response.melt[vstMat.nolow.1.log2response.melt$Var1=="AT3G16750.1",]
+
+#head(test)
+#unique(test$gt)
+#draw expression pattern for one genes for each genotypes response to time
+library(ggplot2)
+p <- ggplot(data = test10)
+p <- p + geom_line(aes(x = factor(time), y = value, group=gt, color=gt))
+# p  <- p + facet_grid(~gt)
+p <- p + labs(y = "fold change", x="time", title="")
+p 
+ggsave(p, filename = "~/Desktop/expression pattern.AT3G16750.1.png", height = 6, width = 25)
+
+```
